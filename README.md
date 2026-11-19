@@ -25,7 +25,7 @@ Drawing a recognisable picture inside those limits takes several tricks working 
 
 ### 1. Plan on a grid the size of the brush
 
-The picture is resampled onto a grid where the 6 px brush is exactly 3 cells wide (440 × 440 for an 880 px canvas). Planning at that resolution means every stroke the planner considers is one the phone can actually make: a round 6 px tip dragged along a row. The planner keeps a model of how much ink every cell holds, including the soft, partly covered edges of each round tip.
+The picture is resampled onto a grid where the 6 px brush is exactly 3 cells wide (440 × 440 for an 880 px canvas; past 600 cells on the long side both sides shrink together, so the cells stay square on a tall canvas). Planning at that resolution means every stroke the planner considers is one the phone can actually make: a round 6 px tip dragged along a row. The planner keeps a model of how much ink every cell holds, including the soft, partly covered edges of each round tip.
 
 ### 2. Brush and eraser in passes
 
@@ -95,7 +95,7 @@ npm install
 The same for both tools:
 
 1. On the phone, turn on **Developer options**, **USB debugging** and **Pointer location**. Connect it by USB and accept the "Allow USB debugging?" prompt; `adb devices` should list it.
-2. Open the custom sticker canvas in HeyTea. With Pointer location on, note the canvas's left and top edge and its width and height on screen, in pixels.
+2. Open the custom sticker canvas in HeyTea. Both tools can [find it on a screenshot](#lining-up-the-canvas); otherwise, with Pointer location on, note the canvas's left and top edge and its width and height on screen, in pixels.
 3. If the drawing uses the eraser (the pixel sweep does), also note where the eraser and pen buttons are, so the drawing can switch tools by itself. Without them it pauses and asks you to switch by hand.
 
 How the pen moves:
@@ -103,6 +103,15 @@ How the pen moves:
 - **swipe**: `input swipe`, works on any Android;
 - **continuous**: `input motionevent`, Android 10+;
 - **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`.
+
+### Lining up the canvas
+
+The drawing has to land exactly on the canvas, so the tools need its edges on screen. Instead of reading them off with Pointer location, let them find it: open Create Sticker with the canvas empty and the pen picked, and give them a screenshot.
+
+- **Command line:** `draw` and `test` do this by themselves. After you press Enter they take a screenshot over ADB (`adb exec-out screencap -p`), find the canvas and plan for its size. `heytea-sticker detect` just reports it, and `-o screen.png` saves the screenshot with the canvas outlined, to check.
+- **Web UI:** in step 03, choose or drop a screenshot on "find it from a screenshot" (for example from `adb exec-out screencap -p > screen.png`, or the phone's own screenshot). It fills in Left, Top, Width and Height and shows what it found.
+
+The canvas is found as an area of one flat colour (in HeyTea, light grey inside a white card): for each colour that covers a fair part of the screen, the rows and then the columns holding a good share of it give a rectangle with exact edges. The winner must be mostly that colour just inside its edges, something else just outside, and clear of the screen edges, which rules out the page, banners and toolbars. Strokes already on the canvas count with it, so a canvas with a drawing on it is still found. On a 1440 × 3200 phone, HeyTea's canvas is portrait, 1015 × 1428 at (213, 656), not the 880 × 880 square the settings start with, and the drawing is planned for that shape.
 
 ### Web UI
 
@@ -114,7 +123,7 @@ Then open http://localhost:8000 (`node serve.js 8080` picks another port). There
 
 1. **Image**: drop, paste or pick a picture, and choose whether it fills the canvas (the default) or fits inside it. Brightness and contrast sliders sit right below, the same settings as the ones under Tone, for a quick adjustment. It is auto-matched straight away, and you can watch the search: twice a second the drawing pane redraws with the settings it is trying, named underneath with their stroke count, next to the best score so far, until the final match replaces it.
 2. **Style**: change the style or any setting; the preview redraws as you go.
-3. **Your phone**: enter the canvas edges and tool buttons (saved in the browser).
+3. **Your phone**: drop a screenshot to find the canvas, or enter its edges, plus the tool buttons (saved in the browser).
 4. **Draw it**: download `draw.sh`, then:
 
    ```bash
@@ -148,16 +157,16 @@ Pixel sweep · 79% match
 settings: --no-match --mode pixel-sweep --contrast -30 --midtones 140 --passes 7
 ```
 
-Draw it on the phone. It checks for `adb` and the phone first, plans, pushes the script, waits for you to press Enter with the canvas open, then draws (Ctrl+C stops it):
+Draw it on the phone. It checks for `adb` and the phone first, waits for you to press Enter with the canvas open, finds the canvas on a screenshot, plans for it, pushes the script and draws (Ctrl+C stops it):
 
 ```bash
-heytea-sticker draw photo.jpg --canvas 100,600,880,880 --eraser-button 960,2300 --pen-button 840,2300
+heytea-sticker draw photo.jpg --eraser-button 960,2300 --pen-button 840,2300
 ```
 
 Check the tool buttons first with the tool-switch test:
 
 ```bash
-heytea-sticker test --canvas 100,600,880,880 --eraser-button 960,2300 --pen-button 840,2300
+heytea-sticker test --eraser-button 960,2300 --pen-button 840,2300
 ```
 
 More examples:
@@ -184,6 +193,7 @@ heytea-sticker draw photo.jpg --no-match --contrast -30 --midtones 140 --passes 
 | `draw <image>` | plan, then draw on the phone over ADB (`-o` also saves the PNG) |
 | `script <image>` | plan, then write the ADB script (`-o`, default `draw.sh`) to run yourself |
 | `test` | draw the tool-switch test on the phone |
+| `detect [screenshot]` | find the canvas on the phone screen, or on a screenshot (`-o` saves it outlined) |
 | `devices` | list what ADB sees |
 
 Without `--no-match`, the tone is auto-matched first, as on the web page, and any drawing setting you pass is applied on top of the match. Every run prints the settings it used as flags: add them to a later run to get the same drawing again without the search. `--json` prints the result as JSON, `--script FILE` also saves the ADB script, `-s SERIAL` picks a phone when several are connected, and `--adb PATH` (or `ADB=...`) points at an `adb` that isn't on PATH. `heytea-sticker --help` lists everything and `--list-styles` the styles.
@@ -192,7 +202,7 @@ If `adb` is missing, no phone is connected, the phone hasn't allowed the compute
 
 ### Settings in both tools
 
-The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 canvas at (100, 600), a 6 px brush, an 8 px eraser, 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
+The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 canvas at (100, 600) unless it is found on the phone (`draw` and `test` look for it, `--canvas auto` makes the others do too), a 6 px brush, an 8 px eraser, 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
 
 | Web UI | Command line | Range |
 |---|---|---|
@@ -210,6 +220,7 @@ The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 
 | any other control | `--set KEY=VALUE` | engine names, e.g. `--set sen=70` for edge sensitivity |
 | Brush size, Eraser size | `--brush`, `--eraser` | px on the phone |
 | Left, Top, Width, Height | `--canvas L,T,W,H` | px on the phone |
+| find it from a screenshot | `--canvas auto`, `--screenshot FILE`, `detect` | the phone's screen, or a screenshot file |
 | How the pen moves | `--method` | `swipe`, `continuous` or `fast` |
 | Swipe time | `--swipe-ms` | ms |
 | Eraser X/Y, Pen X/Y | `--eraser-button X,Y`, `--pen-button X,Y` | px on the phone |

@@ -37,7 +37,7 @@ var DRAW = [
 var PHONE = [
   { flag: 'brush', key: 'pen', type: 'num', min: 1, max: 100, web: 'Brush size (px)', help: 'brush size on the phone in px' },
   { flag: 'eraser', key: 'esz', type: 'num', min: 1, max: 100, web: 'Eraser size (px)', help: 'eraser size on the phone in px' },
-  { flag: 'canvas', key: ['rx', 'ry', 'rw', 'rh'], type: 'list', n: 4, web: 'Left, Top, Width, Height', help: 'LEFT,TOP,WIDTH,HEIGHT of the sticker canvas on screen in px' },
+  { flag: 'canvas', key: ['rx', 'ry', 'rw', 'rh'], type: 'list', n: 4, arg: 'L,T,W,H|auto', def: 'auto for draw and test, else 100,600,880,880', web: 'Left, Top, Width, Height', help: 'the sticker canvas on screen in px, or auto: find it on a phone screenshot' },
   { flag: 'method', key: 'method', type: { swipe: 'sw', continuous: 'mo', fast: 'fe' }, web: 'How the pen moves', help: 'swipe (any Android), continuous (Android 10+), fast (sendevent)' },
   { flag: 'swipe-ms', key: 'dur', type: 'num', min: 1, max: 5000, web: 'Swipe time (ms)', help: 'time per swipe segment, swipe method' },
   { flag: 'eraser-button', key: ['ex', 'ey'], type: 'list', n: 2, web: 'Eraser X, Y', help: 'X,Y of the eraser button (0,0 = switch by hand)' },
@@ -74,6 +74,7 @@ var HELP = [
   '  heytea-sticker draw <image> [options]      plan, then draw on the connected phone over ADB',
   '  heytea-sticker script <image> [options]    plan, then write the ADB shell script (draw.sh)',
   '  heytea-sticker test [options]              draw the tool-switch test on the phone',
+  '  heytea-sticker detect [screenshot]         find the sticker canvas on the phone screen (or a screenshot)',
   '  heytea-sticker devices                     list ADB devices',
   '',
   'By default the tone settings are auto-matched, exactly like the web page: the pixel sweep is drawn',
@@ -90,7 +91,8 @@ var HELP = [
   '',
   'Output:',
   '  -o, --out FILE              preview PNG (preview: default <image>.sticker.png) or script (script:',
-  '                              default draw.sh); for draw, also save a preview PNG here',
+  '                              default draw.sh); for draw, also save a preview PNG here; for detect,',
+  '                              the screenshot with the canvas outlined',
   '  --script FILE               also save the ADB script here (preview, draw)',
   '  --json                      print the result as JSON on stdout',
   '  -q, --quiet                 no progress output',
@@ -98,6 +100,7 @@ var HELP = [
   'ADB:',
   '  --adb PATH                  adb executable (default: $ADB, then adb on PATH)',
   '  -s, --serial SERIAL         device to use when more than one is connected ($ANDROID_SERIAL works too)',
+  '  --screenshot FILE           find the canvas on this screenshot instead of the phone screen',
   '  -y, --yes                   start drawing without waiting for Enter',
   '',
   '  --list-styles               list the drawing styles',
@@ -107,7 +110,9 @@ var HELP = [
   'Examples:',
   '  heytea-sticker preview photo.jpg',
   '  heytea-sticker preview photo.jpg --tiles 6 --passes 8 -o out.png',
-  '  heytea-sticker draw photo.jpg --canvas 100,600,880,880 --eraser-button 960,2300 --pen-button 840,2300',
+  '  heytea-sticker detect -o screen.png',
+  '  heytea-sticker draw photo.jpg --eraser-button 960,2300 --pen-button 840,2300',
+  '  heytea-sticker draw photo.jpg --canvas 213,656,1015,1428',
   '  heytea-sticker draw photo.jpg --no-match --brightness 10 --contrast -20 --midtones 130',
   ''
 ]).join('\n');
@@ -141,7 +146,7 @@ function parse(argv) {
   var options = {
     'no-match': { type: 'boolean' }, set: { type: 'string', multiple: true },
     out: { type: 'string', short: 'o' }, script: { type: 'string' }, json: { type: 'boolean' }, quiet: { type: 'boolean', short: 'q' },
-    adb: { type: 'string' }, serial: { type: 'string', short: 's' }, yes: { type: 'boolean', short: 'y' },
+    adb: { type: 'string' }, screenshot: { type: 'string' }, serial: { type: 'string', short: 's' }, yes: { type: 'boolean', short: 'y' },
     'list-styles': { type: 'boolean' }, help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' }
   };
   ALL.forEach(function (o) { options[o.flag] = { type: o.type === 'bool' ? 'boolean' : 'string' }; if (o.short) options[o.flag].short = o.short; });
@@ -352,7 +357,56 @@ function waitForEnter(msg) {
     rl.question(msg, function () { rl.close(); done(); });
   });
 }
-function drawOnPhone(dev, text, name, vals) {
+var READY = 'Open the custom sticker canvas in HeyTea, pick the black pen, keep the screen on, then press Enter (Ctrl+C to stop)… ';
+function askReady(vals) { return vals.yes || !process.stdin.isTTY ? Promise.resolve() : waitForEnter(READY); }
+
+/* ---------- finding the canvas on the phone screen ---------- */
+
+function phoneScreen(dev) {
+  var r = runAdb(dev.bin, ['-s', dev.serial, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
+  if (r.status !== 0 || !r.stdout || r.stdout.length < 100) fail('could not take a screenshot of the phone (adb exec-out screencap -p).\n' + String(r.stderr || '').trim());
+  return r.stdout;
+}
+// the screenshot (a file, or the phone's screen right now), and the canvas found on it
+function screenAndCanvas(vals, dev) {
+  var src = vals.screenshot, buf;
+  if (src) { if (!fs.existsSync(src)) fail('no such screenshot: ' + src, 2); buf = fs.readFileSync(src); }
+  else { log('Taking a screenshot of the phone…'); buf = phoneScreen(dev); }
+  return canvas().loadImage(buf).then(function (im) {
+    var c = makeCanvas(im.width, im.height), x = c.getContext('2d');
+    x.drawImage(im, 0, 0);
+    return { src: src || 'the phone screen', W: im.width, H: im.height, cv: c, found: E.findCanvas(x.getImageData(0, 0, im.width, im.height).data, im.width, im.height) };
+  }, function (e) { fail('could not read ' + (src || 'the phone screenshot') + ' as an image (' + e.message + ')', 2); });
+}
+// the screenshot with the canvas outlined, to check what was found
+function annotate(d, file) {
+  var x = d.cv.getContext('2d'), f = d.found, lw = Math.max(3, Math.round(d.W / 240));
+  if (f) {
+    x.strokeStyle = '#ff2d55'; x.lineWidth = lw;
+    if (f.shape === 'circle') { x.beginPath(); x.ellipse(f.x + f.w / 2, f.y + f.h / 2, f.w / 2, f.h / 2, 0, 0, Math.PI * 2); x.stroke(); }
+    else x.strokeRect(f.x - lw / 2, f.y - lw / 2, f.w + lw, f.h + lw);
+    var label = f.x + ',' + f.y + '  ' + f.w + ' × ' + f.h, fs2 = Math.round(d.W / 28);
+    x.font = 'bold ' + fs2 + 'px sans-serif';
+    var tw = x.measureText(label).width, ly = f.y > fs2 * 2 ? f.y - fs2 * 0.6 : f.y + f.h + fs2 * 1.4;
+    x.fillStyle = '#ff2d55'; x.fillRect(f.x, ly - fs2 * 1.1, tw + fs2, fs2 * 1.5);
+    x.fillStyle = '#fff'; x.fillText(label, f.x + fs2 / 2, ly);
+  }
+  fs.writeFileSync(file, d.cv.toBuffer('image/png'));
+}
+var NOT_FOUND = 'Open Create Sticker in HeyTea so the empty canvas is on screen, or give the edges with --canvas LEFT,TOP,WIDTH,HEIGHT.\n' +
+  '"heytea-sticker detect -o screen.png" saves what the phone shows, with what was found outlined.';
+// put the found canvas into the phone settings and the drawing's size
+function useCanvas(d, cfg) {
+  if (!d.found) fail("couldn't find the sticker canvas on " + d.src + '.\n' + NOT_FOUND);
+  var f = d.found, Ph = cfg.Ph, P = cfg.P;
+  Ph.rx = f.x; Ph.ry = f.y; Ph.rw = f.w; Ph.rh = f.h; Ph.scw = d.W; Ph.sch = d.H;
+  P.rw = f.w; P.rh = f.h;
+  if (f.shape === 'circle' && cfg.given.shape === undefined) P.shape = 'circle';
+  log('Canvas found: --canvas ' + [f.x, f.y, f.w, f.h].join(',') + ' (' + f.w + ' × ' + f.h + (f.shape === 'circle' ? ', round' : '') + ' on a ' + d.W + ' × ' + d.H + ' screen)');
+  return f;
+}
+
+function drawOnPhone(dev, text, name, vals, asked) {
   var tmp = path.join(os.tmpdir(), 'heytea-' + process.pid + '-' + name);
   fs.writeFileSync(tmp, text);
   var remote = '/sdcard/' + name, s = ['-s', dev.serial];
@@ -360,9 +414,7 @@ function drawOnPhone(dev, text, name, vals) {
   var r = runAdb(dev.bin, s.concat(['push', tmp, remote]));
   fs.unlinkSync(tmp);
   if (r.status !== 0) fail('adb push failed:\n' + (r.stderr || r.stdout).trim());
-  var go = vals.yes || !process.stdin.isTTY ? Promise.resolve()
-    : waitForEnter('Open the custom sticker canvas in HeyTea, pick the black pen, keep the screen on, then press Enter (Ctrl+C to stop)… ');
-  return go.then(function () {
+  return (asked ? Promise.resolve() : askReady(vals)).then(function () {
     log('Drawing. Press Ctrl+C to stop.');
     var t0 = Date.now(), p = runAdb(dev.bin, s.concat(['shell', 'sh', remote]), { stdio: 'inherit' });
     if (p.status !== 0) fail('the script stopped with exit code ' + p.status + '.');
@@ -382,7 +434,7 @@ function main() {
   }
   var cmd = pos[0];
   if (vals.help || !cmd || cmd === 'help') { process.stdout.write(HELP); return; }
-  if (['preview', 'draw', 'script', 'test', 'devices'].indexOf(cmd) < 0) {
+  if (['preview', 'draw', 'script', 'test', 'detect', 'devices'].indexOf(cmd) < 0) {
     if (fs.existsSync(cmd)) fail('say what to do with ' + cmd + ': heytea-sticker preview ' + cmd + '  or  heytea-sticker draw ' + cmd, 2);
     fail('unknown command "' + cmd + '". Run heytea-sticker --help.', 2);
   }
@@ -394,19 +446,42 @@ function main() {
     return;
   }
 
+  // --canvas auto (the default for draw and test) or --screenshot: find the canvas on the screen
+  var auto = vals.canvas === 'auto' || !!vals.screenshot || (vals.canvas === undefined && (cmd === 'draw' || cmd === 'test'));
+  if (vals.canvas === 'auto') delete vals.canvas;
+  if (cmd === 'detect' && pos[1] && !vals.screenshot) vals.screenshot = pos[1];
   var cfg = settingsFor(vals), P = cfg.P, Ph = cfg.Ph;
+
+  if (cmd === 'detect') {
+    return screenAndCanvas(vals, vals.screenshot ? null : pickDevice(vals)).then(function (d) {
+      if (vals.out) { annotate(d, vals.out); log('Saved ' + vals.out + (d.found ? ' with the canvas outlined' : '')); }
+      if (vals.json) { process.stdout.write(JSON.stringify({ screen: [d.W, d.H], canvas: d.found }, null, 2) + '\n'); if (!d.found) process.exit(1); return; }
+      var f = useCanvas(d, cfg);
+      process.stdout.write('--canvas ' + [f.x, f.y, f.w, f.h].join(',') + '\n');
+    });
+  }
+
   if (cmd === 'test') {
-    var dv = pickDevice(vals), G = E.grid(P);
-    return drawOnPhone(dv, E.testScript(G.W, G.H, Ph), 'switch-test.sh', vals);
+    var dv = pickDevice(vals);
+    var ready = auto ? (vals.screenshot ? Promise.resolve() : askReady(vals)).then(function () { return screenAndCanvas(vals, dv); }).then(function (d) { useCanvas(d, cfg); }) : null;
+    return Promise.resolve(ready).then(function () {
+      var G = E.grid(P);
+      return drawOnPhone(dv, E.testScript(G.W, G.H, Ph), 'switch-test.sh', vals, !!ready);
+    });
   }
 
   var file = pos[1];
   if (!file) fail('give an image: heytea-sticker ' + cmd + ' <image>', 2);
   if (pos.length > 2) fail('one image at a time (got ' + (pos.length - 1) + ')', 2);
+  if (!fs.existsSync(file)) fail('no such image: ' + file, 2);
   // look for adb and the phone before the slow part
-  var dev = cmd === 'draw' ? pickDevice(vals) : null;
+  var dev = cmd === 'draw' || (auto && !vals.screenshot) ? pickDevice(vals) : null;
+  // drawing with the canvas found automatically: wait until it is on screen, look, then plan for its size
+  var asked = cmd === 'draw' && auto && !vals.screenshot;
+  var located = !auto ? Promise.resolve()
+    : (asked ? askReady(vals) : Promise.resolve()).then(function () { return screenAndCanvas(vals, dev); }).then(function (d) { useCanvas(d, cfg); });
 
-  return loadImage(file).then(function (img) {
+  return located.then(function () { return loadImage(file); }).then(function (img) {
     log('Loaded ' + path.basename(file) + ' · ' + img.width + ' × ' + img.height);
     if (!vals['no-match']) P = autoMatch(img, P);
     for (var k in cfg.given) P[k] = cfg.given[k];
@@ -419,7 +494,7 @@ function main() {
     var sh = cmd === 'script' ? vals.out || 'draw.sh' : vals.script;
     if (sh) { fs.writeFileSync(sh, text); s.script = path.resolve(sh); log('Script: ' + sh + ' (adb push ' + sh + ' /sdcard/ && adb shell sh /sdcard/' + path.basename(sh) + ')'); }
     report(s, vals.json);
-    if (cmd === 'draw') return drawOnPhone(dev, text, 'draw.sh', vals);
+    if (cmd === 'draw') return drawOnPhone(dev, text, 'draw.sh', vals, asked);
   });
 }
 
