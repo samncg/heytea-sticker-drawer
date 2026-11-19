@@ -12,11 +12,7 @@
   /* ---------- settings ---------- */
 
   var KEY_PHONE = 'ncgg:sticker:phone';
-  var PHONE_DEFAULTS = {
-    rx: 100, ry: 600, rw: 880, rh: 880, pen: 6, esz: 8, method: 'sw', dur: 40,
-    ex: 0, ey: 0, tx: 0, ty: 0, ex2: '', tx2: '', sd: 2, pt: 120,
-    tdev: '/dev/input/event8', mx: 121999, my: 265599, scw: 1220, sch: 2656, mc: false
-  };
+  var PHONE_DEFAULTS = E.PHONE_DEFAULTS;
   var Ph = Object.assign({}, PHONE_DEFAULTS, load(KEY_PHONE) || {});
   var P = E.withDefaults({});
   function syncPhysical() { P.rw = +Ph.rw || 880; P.rh = +Ph.rh || 880; P.pen = +Ph.pen || 6; P.esz = +Ph.esz || 8; }

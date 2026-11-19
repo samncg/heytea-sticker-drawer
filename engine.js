@@ -4,7 +4,8 @@
  * and writes the ADB shell script that draws it on the phone.
  * Ported from the standalone HeyTea Sticker Drawer tool: the stroke planners are unchanged, but every
  * function takes a settings object (P) instead of reading the page, so it runs in a worker as well.
- * Works in a page (window.StickerEngine) and in a worker (self.StickerEngine).
+ * Works in a page (window.StickerEngine), in a worker (self.StickerEngine) and in Node
+ * (require('./engine.js').StickerEngine, used by the command-line tool in cli/).
  */
 (function (root) {
   'use strict';
@@ -978,6 +979,12 @@
     });
   }
   // Ph: phone settings { rx, ry, rw, rh, method: 'sw'|'mo'|'fe', dur, ex, ey, tx, ty, ex2, tx2, sd, pt, tdev, mx, my, scw, sch, mc }
+  // canvas edges on screen, tool sizes, how the pen moves, tool buttons, and the raw touch device for 'fe'
+  var PHONE_DEFAULTS = {
+    rx: 100, ry: 600, rw: 880, rh: 880, pen: 6, esz: 8, method: 'sw', dur: 40,
+    ex: 0, ey: 0, tx: 0, ty: 0, ex2: '', tx2: '', sd: 2, pt: 120,
+    tdev: '/dev/input/event8', mx: 121999, my: 265599, scw: 1220, sch: 2656, mc: false
+  };
   function script(strokes, W, H, Ph) {
     function X(p) { return Math.round(Ph.rx + (p[0] + 0.5) / W * Ph.rw); }
     function Y(p) { return Math.round(Ph.ry + (p[1] + 0.5) / H * Ph.rh); }
@@ -1019,9 +1026,9 @@
   }
 
   root.StickerEngine = {
-    DEFAULTS: DEFAULTS, STYLES: STYLES, isPixel: isPixel, withDefaults: withDefaults, copy: copy,
+    DEFAULTS: DEFAULTS, PHONE_DEFAULTS: PHONE_DEFAULTS, STYLES: STYLES, isPixel: isPixel, withDefaults: withDefaults, copy: copy,
     grid: grid, px: px, luminance: luminance, adjust: adjust, plan: plan,
     rasterize: rasterize, compare: compare, inkTarget: inkTarget, autoMatch: autoMatch,
     script: script, testScript: testScript, estimate: estimate
   };
-})(typeof self !== 'undefined' ? self : this);
+})(typeof self !== 'undefined' ? self : typeof module !== 'undefined' ? module.exports : this);

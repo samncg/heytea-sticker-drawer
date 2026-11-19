@@ -4,6 +4,11 @@ Turn any picture into a drawing for the HeyTea app's custom sticker canvas, then
 
 **Try it:** [ncgg.dev/sticker](https://ncgg.dev/sticker/) · runs entirely in the browser, the image never leaves your device.
 
+There are two ways to use it, both running the same engine with the same settings:
+
+- **[the web UI](#web-ui)**: drop in a picture, tweak it with live previews, download the script for the phone;
+- **[the command line](#command-line)**: `heytea-sticker draw photo.jpg` plans the drawing and draws it on the connected phone in one step, or `preview` writes a PNG without a phone.
+
 ![The same picture drawn four ways: the original, one 6 px brush pass, one dithered pass, and the brush and eraser sweep](docs/brush.png)
 
 ## The problem
@@ -65,13 +70,52 @@ The pixel sweep is the default because it reproduces pictures best, but the plan
 
 ![The same picture in eight styles](docs/methods.png)
 
-## Drawing it on the phone
+## Using it
 
-The page writes a shell script that replays the strokes with ADB:
+### Install
 
-1. On the phone, turn on Developer options, USB debugging and Pointer location. Open the custom sticker canvas and note its edges on screen.
-2. Enter those in step 03. If the drawing uses the eraser, also enter where the eraser and pen buttons are, so the script can switch tools by itself.
-3. Download `draw.sh`, then:
+You need [Node.js](https://nodejs.org) 18.3 or newer, and for drawing on the phone, [Android SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) (`adb`).
+
+```bash
+git clone https://github.com/samncg/heytea-sticker-drawer.git
+```
+
+```bash
+cd heytea-sticker-drawer
+```
+
+```bash
+npm install
+```
+
+`npm install` fetches one package, [`@napi-rs/canvas`](https://github.com/Brooooooklyn/canvas): a prebuilt 2D canvas that lets the command line load images and score drawings the same way the browser does. The web UI itself needs nothing installed.
+
+### Get the phone ready
+
+The same for both tools:
+
+1. On the phone, turn on **Developer options**, **USB debugging** and **Pointer location**. Connect it by USB and accept the "Allow USB debugging?" prompt; `adb devices` should list it.
+2. Open the custom sticker canvas in HeyTea. With Pointer location on, note the canvas's left and top edge and its width and height on screen, in pixels.
+3. If the drawing uses the eraser (the pixel sweep does), also note where the eraser and pen buttons are, so the drawing can switch tools by itself. Without them it pauses and asks you to switch by hand.
+
+How the pen moves:
+
+- **swipe**: `input swipe`, works on any Android;
+- **continuous**: `input motionevent`, Android 10+;
+- **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`.
+
+### Web UI
+
+```bash
+npm start
+```
+
+Then open http://localhost:8000 (`node serve.js 8080` picks another port). There is no build step, so any static server works too, for example `python -m http.server 8000`. The page has to be served over http rather than opened as a file, because browsers won't start its Web Worker from a `file://` page.
+
+1. **Image**: drop, paste or pick a picture. It is auto-matched straight away.
+2. **Style**: change the style or any setting; the preview redraws as you go.
+3. **Your phone**: enter the canvas edges and tool buttons (saved in the browser).
+4. **Draw it**: download `draw.sh`, then:
 
    ```bash
    adb push draw.sh /sdcard/
@@ -81,29 +125,111 @@ The page writes a shell script that replays the strokes with ADB:
    adb shell sh /sdcard/draw.sh
    ```
 
-Three ways to move the pen:
-
-- **swipes**: `input swipe`, works on any Android;
-- **continuous**: `input motionevent`, Android 10+;
-- **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`.
-
 A tool-switch test script draws a line, erases a gap in it and draws a second line, to check the button positions before a long drawing.
 
-## Running it
+### Command line
 
-There is no build step. Serve the folder and open it (the planner runs in a Web Worker, which browsers won't start from a `file://` page):
+After `npm install`, run it with `node cli/heytea-sticker.js`, or put `heytea-sticker` on your PATH with `npm link` (the examples use the short name).
+
+Plan a drawing and look at it, no phone needed. It writes `photo.sticker.png` and reports the stroke count and drawing time:
 
 ```bash
-python -m http.server 8000
+heytea-sticker preview photo.jpg
 ```
 
-Then open http://localhost:8000.
+```text
+Loaded photo.jpg · 640 × 605
+Auto-matching Pixel sweep to the image (this takes a little while)…
+  matched in 17.6 s: 78% match
+Planned in 0.6 s.
+Preview: photo.sticker.png
+Pixel sweep · 78% match
+21,702 strokes · 257 tool switches · about 2.6 h on the phone (21,702 commands, rough estimate)
+settings: --no-match --mode pixel-sweep --brightness 3 --contrast -30 --midtones 140 --passes 10
+```
+
+Draw it on the phone. It checks for `adb` and the phone first, plans, pushes the script, waits for you to press Enter with the canvas open, then draws (Ctrl+C stops it):
+
+```bash
+heytea-sticker draw photo.jpg --canvas 100,600,880,880 --eraser-button 960,2300 --pen-button 840,2300
+```
+
+Check the tool buttons first with the tool-switch test:
+
+```bash
+heytea-sticker test --canvas 100,600,880,880 --eraser-button 960,2300 --pen-button 840,2300
+```
+
+More examples:
+
+```bash
+heytea-sticker preview photo.jpg --tiles 6 --passes 8 --local-contrast 70 -o tuned.png
+```
+
+```bash
+heytea-sticker preview photo.jpg --mode halftone-dots --shape circle --fit cover
+```
+
+```bash
+heytea-sticker script photo.jpg --method continuous -o draw.sh
+```
+
+```bash
+heytea-sticker draw photo.jpg --no-match --brightness 3 --contrast -30 --midtones 140 --passes 10 --yes
+```
+
+| Command | What it does |
+|---|---|
+| `preview <image>` | plan, write a PNG of the drawing (`-o`, default `<image>.sticker.png`), report strokes and time |
+| `draw <image>` | plan, then draw on the phone over ADB (`-o` also saves the PNG) |
+| `script <image>` | plan, then write the ADB script (`-o`, default `draw.sh`) to run yourself |
+| `test` | draw the tool-switch test on the phone |
+| `devices` | list what ADB sees |
+
+Without `--no-match`, the tone is auto-matched first, as on the web page, and any drawing setting you pass is applied on top of the match. Every run prints the settings it used as flags: add them to a later run to get the same drawing again without the search. `--json` prints the result as JSON, `--script FILE` also saves the ADB script, `-s SERIAL` picks a phone when several are connected, and `--adb PATH` (or `ADB=...`) points at an `adb` that isn't on PATH. `heytea-sticker --help` lists everything and `--list-styles` the styles.
+
+If `adb` is missing, no phone is connected, the phone hasn't allowed the computer yet, or several phones are connected, it says so and stops before planning.
+
+### Settings in both tools
+
+The defaults are the web page's: pixel sweep, fit inside, an 880 × 880 canvas at (100, 600), a 6 px brush, an 8 px eraser, 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
+
+| Web UI | Command line | Range |
+|---|---|---|
+| Style | `--mode` | `pixel-sweep`, `scanlines`, `halftone-dots`, … (`--list-styles`) |
+| Image fit | `--fit` | `contain` (fit inside) or `cover` (fill the canvas) |
+| Sticker shape | `--shape` | `rect` or `circle` |
+| Brightness | `--brightness` | -100 to 100 |
+| Contrast | `--contrast` | -100 to 100 |
+| Midtones | `--midtones` | 40 to 250 |
+| Local contrast | `--local-contrast` | 0 to 100 |
+| Darkness cutoff | `--cutoff` | 20 to 235 |
+| Passes | `--passes` | 0 to 30 (0 runs until it stops helping) |
+| Tiles per side | `--tiles` | 1 to 12 |
+| Smoothing, Invert | `--smoothing`, `--invert` | 0 to 4, on/off |
+| any other control | `--set KEY=VALUE` | engine names, e.g. `--set sen=70` for edge sensitivity |
+| Brush size, Eraser size | `--brush`, `--eraser` | px on the phone |
+| Left, Top, Width, Height | `--canvas L,T,W,H` | px on the phone |
+| How the pen moves | `--method` | `swipe`, `continuous` or `fast` |
+| Swipe time | `--swipe-ms` | ms |
+| Eraser X/Y, Pen X/Y | `--eraser-button X,Y`, `--pen-button X,Y` | px on the phone |
+| Extra taps after eraser/pen | `--eraser-taps`, `--pen-taps` | `"x,y; x,y"` |
+| Wait after switching, Button press | `--switch-wait`, `--press-ms` | s, ms |
+| Fast mode fields | `--touch-device`, `--touch-max X,Y`, `--screen W,H`, `--combine-events` | from `getevent -lp` |
+
+### One engine
+
+Both tools load the same `engine.js`: the command line `require`s it, the page and its Web Worker load it as a script. Image adjustment, stroke planning, the score, auto-match and the ADB script all come from that one file, so the same settings mean the same thing in both, and the same image pixels give exactly the same strokes.
+
+The one difference is how the picture is decoded. The command line reads it like the page's main thread does, but the page's worker gets it through `createImageBitmap`, which on some JPEGs shifts the tones by a fraction of a percent. With the same settings that changes a handful of strokes (17,753 on the web against 17,786 on the command line for the sample). It is also enough for auto-match to settle on a neighbouring optimum (midtones 170 on the web, 140 on the command line, both about 78 to 79%). To carry a drawing over from the page, copy its settings into the command line with `--no-match`.
 
 | File | What it does |
 |---|---|
-| `index.html`, `sticker.css` | the page |
-| `app.js` | controls, preview, saved phone settings, script download |
 | `engine.js` | image adjustment, every stroke planner, the score, auto-match and the ADB script writer |
-| `worker.js` | runs planning and auto-match off the main thread |
+| `index.html`, `sticker.css` | the web page |
+| `app.js` | controls, preview, saved phone settings, script download |
+| `worker.js` | runs planning and auto-match off the page's main thread |
+| `serve.js` | the local web server behind `npm start` |
+| `cli/heytea-sticker.js` | the command line: arguments, image loading, PNG preview, ADB |
 
 Part of [ncgg.dev](https://ncgg.dev).

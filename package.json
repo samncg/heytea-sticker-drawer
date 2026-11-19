@@ -1,0 +1,20 @@
+{
+  "name": "heytea-sticker-drawer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Turn a picture into brush and eraser strokes for the HeyTea custom sticker canvas, and draw it on an Android phone over ADB. Web UI and command line, one engine.",
+  "repository": "github:samncg/heytea-sticker-drawer",
+  "bin": {
+    "heytea-sticker": "cli/heytea-sticker.js"
+  },
+  "scripts": {
+    "start": "node serve.js",
+    "sticker": "node cli/heytea-sticker.js"
+  },
+  "engines": {
+    "node": ">=18.3"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.1.1"
+  }
+}
