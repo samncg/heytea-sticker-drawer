@@ -112,7 +112,7 @@ npm start
 
 Then open http://localhost:8000 (`node serve.js 8080` picks another port). There is no build step, so any static server works too, for example `python -m http.server 8000`. The page has to be served over http rather than opened as a file, because browsers won't start its Web Worker from a `file://` page.
 
-1. **Image**: drop, paste or pick a picture, and choose whether it fills the canvas (the default) or fits inside it. It is auto-matched straight away, and you can watch the search: the drawing pane redraws with the best settings found so far, with their score, tone and stroke count, until the final match replaces it.
+1. **Image**: drop, paste or pick a picture, and choose whether it fills the canvas (the default) or fits inside it. It is auto-matched straight away, and you can watch the search: twice a second the drawing pane redraws with the settings it is trying, named underneath with their stroke count, next to the best score so far, until the final match replaces it.
 2. **Style**: change the style or any setting; the preview redraws as you go.
 3. **Your phone**: enter the canvas edges and tool buttons (saved in the browser).
 4. **Draw it**: download `draw.sh`, then:
