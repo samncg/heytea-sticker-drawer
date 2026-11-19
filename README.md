@@ -112,7 +112,7 @@ npm start
 
 Then open http://localhost:8000 (`node serve.js 8080` picks another port). There is no build step, so any static server works too, for example `python -m http.server 8000`. The page has to be served over http rather than opened as a file, because browsers won't start its Web Worker from a `file://` page.
 
-1. **Image**: drop, paste or pick a picture. It is auto-matched straight away, and you can watch the search: the drawing pane redraws with the best settings found so far, with their score, tone and stroke count, until the final match replaces it.
+1. **Image**: drop, paste or pick a picture, and choose whether it fills the canvas (the default) or fits inside it. It is auto-matched straight away, and you can watch the search: the drawing pane redraws with the best settings found so far, with their score, tone and stroke count, until the final match replaces it.
 2. **Style**: change the style or any setting; the preview redraws as you go.
 3. **Your phone**: enter the canvas edges and tool buttons (saved in the browser).
 4. **Draw it**: download `draw.sh`, then:
@@ -140,12 +140,12 @@ heytea-sticker preview photo.jpg
 ```text
 Loaded photo.jpg · 640 × 605
 Auto-matching Pixel sweep to the image (this takes a little while)…
-  matched in 17.6 s: 78% match
+  matched in 13.3 s: 79% match
 Planned in 0.6 s.
 Preview: photo.sticker.png
-Pixel sweep · 78% match
-21,702 strokes · 257 tool switches · about 2.6 h on the phone (21,702 commands, rough estimate)
-settings: --no-match --mode pixel-sweep --brightness 3 --contrast -30 --midtones 140 --passes 10
+Pixel sweep · 79% match
+13,459 strokes · 199 tool switches · about 1.7 h on the phone (13,459 commands, rough estimate)
+settings: --no-match --mode pixel-sweep --contrast -30 --midtones 140 --passes 7
 ```
 
 Draw it on the phone. It checks for `adb` and the phone first, plans, pushes the script, waits for you to press Enter with the canvas open, then draws (Ctrl+C stops it):
@@ -167,7 +167,7 @@ heytea-sticker preview photo.jpg --tiles 6 --passes 8 --local-contrast 70 -o tun
 ```
 
 ```bash
-heytea-sticker preview photo.jpg --mode halftone-dots --shape circle --fit cover
+heytea-sticker preview photo.jpg --mode halftone-dots --shape circle --fit contain
 ```
 
 ```bash
@@ -175,7 +175,7 @@ heytea-sticker script photo.jpg --method continuous -o draw.sh
 ```
 
 ```bash
-heytea-sticker draw photo.jpg --no-match --brightness 3 --contrast -30 --midtones 140 --passes 10 --yes
+heytea-sticker draw photo.jpg --no-match --contrast -30 --midtones 140 --passes 7 --yes
 ```
 
 | Command | What it does |
@@ -192,12 +192,12 @@ If `adb` is missing, no phone is connected, the phone hasn't allowed the compute
 
 ### Settings in both tools
 
-The defaults are the web page's: pixel sweep, fit inside, an 880 × 880 canvas at (100, 600), a 6 px brush, an 8 px eraser, 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
+The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 canvas at (100, 600), a 6 px brush, an 8 px eraser, 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
 
 | Web UI | Command line | Range |
 |---|---|---|
 | Style | `--mode` | `pixel-sweep`, `scanlines`, `halftone-dots`, … (`--list-styles`) |
-| Image fit | `--fit` | `contain` (fit inside) or `cover` (fill the canvas) |
+| Image fit | `--fit` | `cover` (fill the canvas) or `contain` (fit inside) |
 | Sticker shape | `--shape` | `rect` or `circle` |
 | Brightness | `--brightness` | -100 to 100 |
 | Contrast | `--contrast` | -100 to 100 |
@@ -221,7 +221,7 @@ The defaults are the web page's: pixel sweep, fit inside, an 880 × 880 canvas a
 
 Both tools load the same `engine.js`: the command line `require`s it, the page and its Web Worker load it as a script. Image adjustment, stroke planning, the score, auto-match and the ADB script all come from that one file, so the same settings mean the same thing in both, and the same image pixels give exactly the same strokes.
 
-The one difference is how the picture is decoded. The command line reads it like the page's main thread does, but the page's worker gets it through `createImageBitmap`, which on some JPEGs shifts the tones by a fraction of a percent. With the same settings that changes a handful of strokes (17,753 on the web against 17,786 on the command line for the sample). It is also enough for auto-match to settle on a neighbouring optimum (midtones 170 on the web, 140 on the command line, both about 78 to 79%). To carry a drawing over from the page, copy its settings into the command line with `--no-match`.
+The one difference is how the picture is decoded. The command line reads it like the page's main thread does, but the page's worker gets it through `createImageBitmap`, which on some JPEGs shifts the tones by a fraction of a percent. With the same settings that changes a handful of strokes (22,685 on the web against 22,613 on the command line for the sample). It is also enough for auto-match to settle on a neighbouring optimum (brightness 3 and 10 passes on the web, brightness 0 and 7 passes on the command line, both 79%). To carry a drawing over from the page, copy its settings into the command line with `--no-match`.
 
 | File | What it does |
 |---|---|

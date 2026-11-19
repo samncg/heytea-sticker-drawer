@@ -21,7 +21,7 @@ var VERSION = require('../package.json').version;
 // drawing settings (engine P). `web` is the matching label on the web page.
 var DRAW = [
   { flag: 'mode', short: 'm', key: 'mode', type: 'mode', web: 'Style', help: 'drawing style (see --list-styles)', def: 'pixel-sweep' },
-  { flag: 'fit', key: 'fit', type: ['contain', 'cover'], web: 'Image fit', help: 'contain = fit inside, cover = fill the canvas' },
+  { flag: 'fit', key: 'fit', type: ['cover', 'contain'], web: 'Image fit', help: 'cover = fill the canvas, contain = fit inside' },
   { flag: 'shape', key: 'shape', type: ['rect', 'circle'], web: 'Sticker shape', help: 'rect or circle' },
   { flag: 'brightness', key: 'br', type: 'num', min: -100, max: 100, web: 'Brightness', help: '-100..100' },
   { flag: 'contrast', key: 'co', type: 'num', min: -100, max: 100, web: 'Contrast', help: '-100..100' },
