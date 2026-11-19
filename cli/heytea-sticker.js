@@ -35,8 +35,8 @@ var DRAW = [
 ];
 // phone settings (engine Ph)
 var PHONE = [
-  { flag: 'brush', key: 'pen', type: 'num', min: 1, max: 100, web: 'Brush size (px)', help: 'brush size on the phone in px' },
-  { flag: 'eraser', key: 'esz', type: 'num', min: 1, max: 100, web: 'Eraser size (px)', help: 'eraser size on the phone in px' },
+  { flag: 'brush', key: 'pen', type: 'num', min: 1, max: 100, def: 'found with the canvas (3 dp), else 6', web: 'Brush size (px)', help: 'brush width on the phone in px' },
+  { flag: 'eraser', key: 'esz', type: 'num', min: 1, max: 100, def: 'same as the brush when found, else 8', web: 'Eraser size (px)', help: 'eraser width on the phone in px' },
   { flag: 'canvas', key: ['rx', 'ry', 'rw', 'rh'], type: 'list', n: 4, arg: 'L,T,W,H|auto', def: 'auto for draw and test, else 100,600,880,880', web: 'Left, Top, Width, Height', help: 'the sticker canvas on screen in px, or auto: find it on a phone screenshot' },
   { flag: 'method', key: 'method', type: { swipe: 'sw', continuous: 'mo', fast: 'fe' }, web: 'How the pen moves', help: 'swipe (any Android), continuous (Android 10+), fast (sendevent)' },
   { flag: 'swipe-ms', key: 'dur', type: 'num', min: 1, max: 5000, web: 'Swipe time (ms)', help: 'time per swipe segment, swipe method' },
@@ -377,8 +377,14 @@ function screenAndCanvas(vals, dev) {
     x.drawImage(im, 0, 0);
     var data = x.getImageData(0, 0, im.width, im.height).data, found = E.findCanvas(data, im.width, im.height);
     return { src: src || 'the phone screen', W: im.width, H: im.height, cv: c, found: found,
-      tools: found ? E.findTools(data, im.width, im.height, found.y + found.h) : null };
+      tools: found ? E.findTools(data, im.width, im.height, found.y + found.h) : null, dpi: dev ? screenDpi(dev) : 0 };
   }, function (e) { fail('could not read ' + (src || 'the phone screenshot') + ' as an image (' + e.message + ')', 2); });
+}
+// the phone's screen density (dpi), which sets how wide HeyTea's brush is in px
+function screenDpi(dev) {
+  var r = runAdb(dev.bin, ['-s', dev.serial, 'shell', 'wm', 'density']), t = String(r.stdout || '');
+  var m = /Override density:\s*(\d+)/.exec(t) || /Physical density:\s*(\d+)/.exec(t);
+  return m ? +m[1] : 0;
 }
 // the screenshot with the canvas outlined, to check what was found
 function annotate(d, file) {
@@ -416,6 +422,13 @@ function useCanvas(d, cfg, vals, strict) {
   P.rw = f.w; P.rh = f.h;
   if (f.shape === 'circle' && cfg.given.shape === undefined) P.shape = 'circle';
   log('Canvas found: --canvas ' + [f.x, f.y, f.w, f.h].join(',') + ' (' + f.w + ' × ' + f.h + (f.shape === 'circle' ? ', round' : '') + ' on a ' + d.W + ' × ' + d.H + ' screen)');
+  // the brush and eraser as wide as they really draw on this phone, unless given
+  var size = E.toolSize(f.w, d.dpi);
+  if (vals.brush === undefined) { Ph.pen = P.pen = size; }
+  if (vals.eraser === undefined) { Ph.esz = P.esz = size; }
+  if (vals.brush === undefined || vals.eraser === undefined) {
+    log('Brush and eraser: ' + size + ' px, HeyTea’s smallest size ' + (d.dpi ? 'at ' + d.dpi + ' dpi' : 'estimated from the canvas width') + ' (--brush, --eraser to change)');
+  }
   if (d.tools && !own) {
     Ph.tx = d.tools.pen[0]; Ph.ty = d.tools.pen[1]; Ph.ex = d.tools.eraser[0]; Ph.ey = d.tools.eraser[1];
     log('Tool buttons found: --pen-button ' + d.tools.pen.join(',') + ' --eraser-button ' + d.tools.eraser.join(',') + ' (the ' + (d.tools.selected === 'pen' ? 'brush' : 'eraser') + ' is picked)');

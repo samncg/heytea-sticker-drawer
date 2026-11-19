@@ -16,7 +16,7 @@ There are two ways to use it, both running the same engine with the same setting
 HeyTea lets you draw your own sticker, but the canvas is built for a finger, not for reproducing a picture:
 
 - **Black ink only.** There is one colour and an eraser. Every shade of grey has to be faked with a pattern of solid ink and bare paper.
-- **The smallest brush is 6 px.** On a canvas about 880 px wide, that is roughly 150 brush widths across. Anything thinner than the brush tip (an eyelid, a strand of hair, a highlight in an eye) gets filled in.
+- **The smallest brush is about 3 dp wide.** On a 1440 × 3200 phone (560 dpi) that is 10.5 px on a canvas 1015 px wide, so roughly 95 brush widths across, and the eraser is the same size. Anything thinner than the brush tip (an eyelid, a strand of hair, a highlight in an eye) gets filled in. The figures below were drawn with a 6 px brush on an 880 px canvas; the ideas are the same at any size.
 - **No import.** The only way in is drawing, so a picture has to become thousands of strokes that something else performs.
 
 Drawing a recognisable picture inside those limits takes several tricks working together.
@@ -25,11 +25,11 @@ Drawing a recognisable picture inside those limits takes several tricks working 
 
 ### 1. Plan on a grid the size of the brush
 
-The picture is resampled onto a grid where the 6 px brush is exactly 3 cells wide (440 × 440 for an 880 px canvas; past 600 cells on the long side both sides shrink together, so the cells stay square on a tall canvas). Planning at that resolution means every stroke the planner considers is one the phone can actually make: a round 6 px tip dragged along a row. The planner keeps a model of how much ink every cell holds, including the soft, partly covered edges of each round tip.
+The picture is resampled onto a grid where the brush is exactly 3 cells wide (440 × 440 for a 6 px brush on an 880 px canvas, 290 × 408 for a 10.5 px brush on a 1015 × 1428 canvas; past 600 cells on the long side both sides shrink together, so the cells stay square on a tall canvas). Planning at that resolution means every stroke the planner considers is one the phone can actually make: a round tip of the brush's real width dragged along a row. The planner keeps a model of how much ink every cell holds, including the soft, partly covered edges of each round tip.
 
 ### 2. Brush and eraser in passes
 
-One pass of a 6 px brush can only say "ink here or not". The eraser is the way to get detail back: brush strokes lay ink down, then the 8 px eraser sweeps back over the same rows and carves highlights and edges out of it. They alternate, pass after pass:
+One pass of the brush can only say "ink here or not". The eraser is the way to get detail back: brush strokes lay ink down, then the eraser sweeps back over the same rows and carves highlights and edges out of it. They alternate, pass after pass:
 
 - a **brush pass** adds a stroke only where it brings the drawing closer to the picture (under-inking is weighted a little more than over-inking, so dark areas fill properly);
 - an **eraser pass** removes ink only where that clearly helps, with the bar rising each pass so it settles instead of flickering;
@@ -108,10 +108,12 @@ How the pen moves:
 
 The drawing has to land exactly on the canvas, and the script has to tap the Brush and Eraser buttons, so the tools need both positions on screen. Instead of reading them off with Pointer location, let them find them: open Create Sticker with the canvas empty, **pick the Brush** so its tool panel opens, and give them a screenshot.
 
+Getting the brush width right matters as much: the plan is made for marks of exactly that width. Planned for 6 px but drawn 10.5 px wide, every mark nearly doubles, the dithering runs together into solid black and the eraser leaves big dots instead of detail, in a drawing with more than twice the strokes it needs.
+
 Picking the Brush matters: when HeyTea's tool panel opens, the canvas moves up (on a 1440 × 3200 phone from y 656 to y 509), so a screenshot without the panel would put the drawing 147 px too low. Without the panel there are no buttons to find either, so `draw` and `test` stop and ask you to pick the Brush, and the web page says so.
 
-- **Command line:** `draw` and `test` do this by themselves. After you press Enter they take a screenshot over ADB (`adb exec-out screencap -p`), find the canvas and the tool buttons, and plan for the canvas's size. `heytea-sticker detect` just reports them, and `-o screen.png` saves the screenshot with them outlined, to check.
-- **Web UI:** in step 03, choose or drop a screenshot on "find it from a screenshot" (for example from `adb exec-out screencap -p > screen.png`, or the phone's own screenshot). It fills in Left, Top, Width and Height and the eraser and pen buttons, and shows what it found. If a drawing needs the eraser and the buttons aren't set, step 04 warns before you download the script.
+- **Command line:** `draw` and `test` do this by themselves. After you press Enter they take a screenshot over ADB (`adb exec-out screencap -p`), find the canvas and the tool buttons, read the screen density for the brush width, and plan for both. `heytea-sticker detect` just reports them, and `-o screen.png` saves the screenshot with them outlined, to check.
+- **Web UI:** in step 03, choose or drop a screenshot on "find it from a screenshot" (for example from `adb exec-out screencap -p > screen.png`, or the phone's own screenshot). It fills in Left, Top, Width and Height, the brush and eraser sizes and the eraser and pen buttons, and shows what it found. If a drawing needs the eraser and the buttons aren't set, step 04 warns before you download the script.
 
 The canvas is found as an area of one flat colour (in HeyTea, light grey inside a white card): for each colour that covers a fair part of the screen, the rows and then the columns holding a good share of it give a rectangle with exact edges. The winner must be mostly that colour just inside its edges, something else just outside, and clear of the screen edges, which rules out the page, banners and toolbars. The buttons are found in the tool panel below the canvas: the selected tool sits in a light grey pill, and the items in that row are, left to right, Brush, Eraser and a tick. Strokes already on the canvas count with it, so a canvas with a drawing on it is still found. On a 1440 × 3200 phone, HeyTea's canvas is portrait, 1015 × 1428 at (213, 656), not the 880 × 880 square the settings start with, and the drawing is planned for that shape.
 
@@ -204,7 +206,7 @@ If `adb` is missing, no phone is connected, the phone hasn't allowed the compute
 
 ### Settings in both tools
 
-The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 canvas at (100, 600) unless it is found on the phone (`draw` and `test` look for it, `--canvas auto` makes the others do too), a 6 px brush, an 8 px eraser, 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
+The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 canvas at (100, 600) unless it is found on the phone (`draw` and `test` look for it, `--canvas auto` makes the others do too), a 6 px brush and an 8 px eraser unless they are found with the canvas (then both are HeyTea's real smallest size: 3 dp, from the phone's screen density over ADB, or from the canvas width in the web UI), 4 tiles per side, local contrast 50, and auto-match for brightness, contrast, midtones and passes.
 
 | Web UI | Command line | Range |
 |---|---|---|
