@@ -104,6 +104,8 @@ How the pen moves:
 - **continuous**: `input motionevent`, Android 10+;
 - **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`.
 
+Whichever way the pen moves, every line is drawn there and back. HeyTea smooths a stroke through the midpoints between touch events, so the last stretch before the finger lifts is never drawn: on a test phone a 40 ms swipe lost about a third of its length at the end (87 px of 252), and slower swipes less (43 px at 100 ms, 10 px at 200 ms). Each pass starts exactly where it should, and the return pass starts where the first one's end went missing, so the two cover the whole line, at two quick swipes instead of one slow one. Taps come out whole and are drawn once.
+
 ### Lining up the canvas
 
 The drawing has to land exactly on the canvas, and the script has to tap the Brush and Eraser buttons, so the tools need both positions on screen. Instead of reading them off with Pointer location, let them find them: open Create Sticker with the canvas empty, **pick the Brush** so its tool panel opens, and give them a screenshot.

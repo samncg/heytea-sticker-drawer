@@ -257,7 +257,7 @@
   var planner = null, matcher = null, seq = 0, planWanted = null, planBusy = false, matchId = 0;
 
   function spawn() {
-    var w = new Worker('worker.js?v=42');
+    var w = new Worker('worker.js?v=43');
     w.onerror = function () { canWork = false; };
     return w;
   }
