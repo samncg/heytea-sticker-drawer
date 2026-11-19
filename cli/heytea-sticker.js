@@ -40,8 +40,8 @@ var PHONE = [
   { flag: 'canvas', key: ['rx', 'ry', 'rw', 'rh'], type: 'list', n: 4, arg: 'L,T,W,H|auto', def: 'auto for draw and test, else 100,600,880,880', web: 'Left, Top, Width, Height', help: 'the sticker canvas on screen in px, or auto: find it on a phone screenshot' },
   { flag: 'method', key: 'method', type: { swipe: 'sw', continuous: 'mo', fast: 'fe' }, web: 'How the pen moves', help: 'swipe (any Android), continuous (Android 10+), fast (sendevent)' },
   { flag: 'swipe-ms', key: 'dur', type: 'num', min: 1, max: 5000, web: 'Swipe time (ms)', help: 'time per swipe segment, swipe method' },
-  { flag: 'eraser-button', key: ['ex', 'ey'], type: 'list', n: 2, web: 'Eraser X, Y', help: 'X,Y of the eraser button (0,0 = switch by hand)' },
-  { flag: 'pen-button', key: ['tx', 'ty'], type: 'list', n: 2, web: 'Pen X, Y', help: 'X,Y of the pen button' },
+  { flag: 'eraser-button', key: ['ex', 'ey'], type: 'list', n: 2, web: 'Eraser X, Y', def: 'found with the canvas, else 0,0 = switch by hand', help: 'X,Y of the eraser button' },
+  { flag: 'pen-button', key: ['tx', 'ty'], type: 'list', n: 2, web: 'Pen X, Y', def: 'found with the canvas', help: 'X,Y of the pen button' },
   { flag: 'eraser-taps', key: 'ex2', type: 'str', web: 'Extra taps after eraser', help: '"x,y; x,y" extra taps after picking the eraser' },
   { flag: 'pen-taps', key: 'tx2', type: 'str', web: 'Extra taps after pen', help: '"x,y; x,y" extra taps after picking the pen' },
   { flag: 'switch-wait', key: 'sd', type: 'num', min: 0, max: 60, web: 'Wait after switching (s)', help: 'seconds to wait after a tool switch' },
@@ -111,8 +111,8 @@ var HELP = [
   '  heytea-sticker preview photo.jpg',
   '  heytea-sticker preview photo.jpg --tiles 6 --passes 8 -o out.png',
   '  heytea-sticker detect -o screen.png',
-  '  heytea-sticker draw photo.jpg --eraser-button 960,2300 --pen-button 840,2300',
-  '  heytea-sticker draw photo.jpg --canvas 213,656,1015,1428',
+  '  heytea-sticker draw photo.jpg',
+  '  heytea-sticker draw photo.jpg --canvas 213,509,1015,1428 --eraser-button 879,2657 --pen-button 561,2657',
   '  heytea-sticker draw photo.jpg --no-match --brightness 10 --contrast -20 --midtones 130',
   ''
 ]).join('\n');
@@ -375,7 +375,9 @@ function screenAndCanvas(vals, dev) {
   return canvas().loadImage(buf).then(function (im) {
     var c = makeCanvas(im.width, im.height), x = c.getContext('2d');
     x.drawImage(im, 0, 0);
-    return { src: src || 'the phone screen', W: im.width, H: im.height, cv: c, found: E.findCanvas(x.getImageData(0, 0, im.width, im.height).data, im.width, im.height) };
+    var data = x.getImageData(0, 0, im.width, im.height).data, found = E.findCanvas(data, im.width, im.height);
+    return { src: src || 'the phone screen', W: im.width, H: im.height, cv: c, found: found,
+      tools: found ? E.findTools(data, im.width, im.height, found.y + found.h) : null };
   }, function (e) { fail('could not read ' + (src || 'the phone screenshot') + ' as an image (' + e.message + ')', 2); });
 }
 // the screenshot with the canvas outlined, to check what was found
@@ -391,18 +393,35 @@ function annotate(d, file) {
     x.fillStyle = '#ff2d55'; x.fillRect(f.x, ly - fs2 * 1.1, tw + fs2, fs2 * 1.5);
     x.fillStyle = '#fff'; x.fillText(label, f.x + fs2 / 2, ly);
   }
+  if (d.tools) [['pen', d.tools.pen], ['eraser', d.tools.eraser]].forEach(function (t) {
+    var r = Math.round(d.W / 30);
+    x.strokeStyle = '#ff2d55'; x.lineWidth = lw;
+    x.beginPath(); x.arc(t[1][0], t[1][1], r, 0, Math.PI * 2); x.stroke();
+  });
   fs.writeFileSync(file, d.cv.toBuffer('image/png'));
 }
 var NOT_FOUND = 'Open Create Sticker in HeyTea so the empty canvas is on screen, or give the edges with --canvas LEFT,TOP,WIDTH,HEIGHT.\n' +
   '"heytea-sticker detect -o screen.png" saves what the phone shows, with what was found outlined.';
 // put the found canvas into the phone settings and the drawing's size
-function useCanvas(d, cfg) {
+// strict (draw, test): without HeyTea's tool panel on screen the canvas sits lower than while drawing, so stop
+function useCanvas(d, cfg, vals, strict) {
   if (!d.found) fail("couldn't find the sticker canvas on " + d.src + '.\n' + NOT_FOUND);
-  var f = d.found, Ph = cfg.Ph, P = cfg.P;
+  var f = d.found, Ph = cfg.Ph, P = cfg.P, own = vals['eraser-button'] !== undefined || vals['pen-button'] !== undefined;
+  if (!d.tools && strict && !own) {
+    fail("couldn't find the Brush and Eraser buttons on " + d.src + '.\n' +
+      'Pick the Brush in HeyTea so its tool panel opens (the canvas moves up when it does), then run this again,\n' +
+      'or give the buttons with --eraser-button X,Y --pen-button X,Y.');
+  }
   Ph.rx = f.x; Ph.ry = f.y; Ph.rw = f.w; Ph.rh = f.h; Ph.scw = d.W; Ph.sch = d.H;
   P.rw = f.w; P.rh = f.h;
   if (f.shape === 'circle' && cfg.given.shape === undefined) P.shape = 'circle';
   log('Canvas found: --canvas ' + [f.x, f.y, f.w, f.h].join(',') + ' (' + f.w + ' × ' + f.h + (f.shape === 'circle' ? ', round' : '') + ' on a ' + d.W + ' × ' + d.H + ' screen)');
+  if (d.tools && !own) {
+    Ph.tx = d.tools.pen[0]; Ph.ty = d.tools.pen[1]; Ph.ex = d.tools.eraser[0]; Ph.ey = d.tools.eraser[1];
+    log('Tool buttons found: --pen-button ' + d.tools.pen.join(',') + ' --eraser-button ' + d.tools.eraser.join(',') + ' (the ' + (d.tools.selected === 'pen' ? 'brush' : 'eraser') + ' is picked)');
+  } else if (!d.tools && !own) {
+    log('No Brush and Eraser buttons on ' + d.src + ': pick the Brush so its panel opens, and look again (the canvas moves up when it does).');
+  }
   return f;
 }
 
@@ -455,15 +474,15 @@ function main() {
   if (cmd === 'detect') {
     return screenAndCanvas(vals, vals.screenshot ? null : pickDevice(vals)).then(function (d) {
       if (vals.out) { annotate(d, vals.out); log('Saved ' + vals.out + (d.found ? ' with the canvas outlined' : '')); }
-      if (vals.json) { process.stdout.write(JSON.stringify({ screen: [d.W, d.H], canvas: d.found }, null, 2) + '\n'); if (!d.found) process.exit(1); return; }
-      var f = useCanvas(d, cfg);
-      process.stdout.write('--canvas ' + [f.x, f.y, f.w, f.h].join(',') + '\n');
+      if (vals.json) { process.stdout.write(JSON.stringify({ screen: [d.W, d.H], canvas: d.found, tools: d.tools }, null, 2) + '\n'); if (!d.found) process.exit(1); return; }
+      var f = useCanvas(d, cfg, vals, false);
+      process.stdout.write('--canvas ' + [f.x, f.y, f.w, f.h].join(',') + (d.tools ? ' --pen-button ' + d.tools.pen.join(',') + ' --eraser-button ' + d.tools.eraser.join(',') : '') + '\n');
     });
   }
 
   if (cmd === 'test') {
     var dv = pickDevice(vals);
-    var ready = auto ? (vals.screenshot ? Promise.resolve() : askReady(vals)).then(function () { return screenAndCanvas(vals, dv); }).then(function (d) { useCanvas(d, cfg); }) : null;
+    var ready = auto ? (vals.screenshot ? Promise.resolve() : askReady(vals)).then(function () { return screenAndCanvas(vals, dv); }).then(function (d) { useCanvas(d, cfg, vals, true); }) : null;
     return Promise.resolve(ready).then(function () {
       var G = E.grid(P);
       return drawOnPhone(dv, E.testScript(G.W, G.H, Ph), 'switch-test.sh', vals, !!ready);
@@ -479,7 +498,7 @@ function main() {
   // drawing with the canvas found automatically: wait until it is on screen, look, then plan for its size
   var asked = cmd === 'draw' && auto && !vals.screenshot;
   var located = !auto ? Promise.resolve()
-    : (asked ? askReady(vals) : Promise.resolve()).then(function () { return screenAndCanvas(vals, dev); }).then(function (d) { useCanvas(d, cfg); });
+    : (asked ? askReady(vals) : Promise.resolve()).then(function () { return screenAndCanvas(vals, dev); }).then(function (d) { useCanvas(d, cfg, vals, cmd === 'draw'); });
 
   return located.then(function () { return loadImage(file); }).then(function (img) {
     log('Loaded ' + path.basename(file) + ' · ' + img.width + ' × ' + img.height);

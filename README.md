@@ -96,7 +96,7 @@ The same for both tools:
 
 1. On the phone, turn on **Developer options**, **USB debugging** and **Pointer location**. Connect it by USB and accept the "Allow USB debugging?" prompt; `adb devices` should list it.
 2. Open the custom sticker canvas in HeyTea. Both tools can [find it on a screenshot](#lining-up-the-canvas); otherwise, with Pointer location on, note the canvas's left and top edge and its width and height on screen, in pixels.
-3. If the drawing uses the eraser (the pixel sweep does), also note where the eraser and pen buttons are, so the drawing can switch tools by itself. Without them it pauses and asks you to switch by hand.
+3. If the drawing uses the eraser (the pixel sweep does), the script needs the eraser and pen buttons too, so it can switch tools by itself. The same screenshot gives them; otherwise note where they are. Without them it stops at every switch and waits for you to tap the tool.
 
 How the pen moves:
 
@@ -106,12 +106,14 @@ How the pen moves:
 
 ### Lining up the canvas
 
-The drawing has to land exactly on the canvas, so the tools need its edges on screen. Instead of reading them off with Pointer location, let them find it: open Create Sticker with the canvas empty and the pen picked, and give them a screenshot.
+The drawing has to land exactly on the canvas, and the script has to tap the Brush and Eraser buttons, so the tools need both positions on screen. Instead of reading them off with Pointer location, let them find them: open Create Sticker with the canvas empty, **pick the Brush** so its tool panel opens, and give them a screenshot.
 
-- **Command line:** `draw` and `test` do this by themselves. After you press Enter they take a screenshot over ADB (`adb exec-out screencap -p`), find the canvas and plan for its size. `heytea-sticker detect` just reports it, and `-o screen.png` saves the screenshot with the canvas outlined, to check.
-- **Web UI:** in step 03, choose or drop a screenshot on "find it from a screenshot" (for example from `adb exec-out screencap -p > screen.png`, or the phone's own screenshot). It fills in Left, Top, Width and Height and shows what it found.
+Picking the Brush matters: when HeyTea's tool panel opens, the canvas moves up (on a 1440 × 3200 phone from y 656 to y 509), so a screenshot without the panel would put the drawing 147 px too low. Without the panel there are no buttons to find either, so `draw` and `test` stop and ask you to pick the Brush, and the web page says so.
 
-The canvas is found as an area of one flat colour (in HeyTea, light grey inside a white card): for each colour that covers a fair part of the screen, the rows and then the columns holding a good share of it give a rectangle with exact edges. The winner must be mostly that colour just inside its edges, something else just outside, and clear of the screen edges, which rules out the page, banners and toolbars. Strokes already on the canvas count with it, so a canvas with a drawing on it is still found. On a 1440 × 3200 phone, HeyTea's canvas is portrait, 1015 × 1428 at (213, 656), not the 880 × 880 square the settings start with, and the drawing is planned for that shape.
+- **Command line:** `draw` and `test` do this by themselves. After you press Enter they take a screenshot over ADB (`adb exec-out screencap -p`), find the canvas and the tool buttons, and plan for the canvas's size. `heytea-sticker detect` just reports them, and `-o screen.png` saves the screenshot with them outlined, to check.
+- **Web UI:** in step 03, choose or drop a screenshot on "find it from a screenshot" (for example from `adb exec-out screencap -p > screen.png`, or the phone's own screenshot). It fills in Left, Top, Width and Height and the eraser and pen buttons, and shows what it found. If a drawing needs the eraser and the buttons aren't set, step 04 warns before you download the script.
+
+The canvas is found as an area of one flat colour (in HeyTea, light grey inside a white card): for each colour that covers a fair part of the screen, the rows and then the columns holding a good share of it give a rectangle with exact edges. The winner must be mostly that colour just inside its edges, something else just outside, and clear of the screen edges, which rules out the page, banners and toolbars. The buttons are found in the tool panel below the canvas: the selected tool sits in a light grey pill, and the items in that row are, left to right, Brush, Eraser and a tick. Strokes already on the canvas count with it, so a canvas with a drawing on it is still found. On a 1440 × 3200 phone, HeyTea's canvas is portrait, 1015 × 1428 at (213, 656), not the 880 × 880 square the settings start with, and the drawing is planned for that shape.
 
 ### Web UI
 
@@ -160,13 +162,13 @@ settings: --no-match --mode pixel-sweep --contrast -30 --midtones 140 --passes 7
 Draw it on the phone. It checks for `adb` and the phone first, waits for you to press Enter with the canvas open, finds the canvas on a screenshot, plans for it, pushes the script and draws (Ctrl+C stops it):
 
 ```bash
-heytea-sticker draw photo.jpg --eraser-button 960,2300 --pen-button 840,2300
+heytea-sticker draw photo.jpg
 ```
 
 Check the tool buttons first with the tool-switch test:
 
 ```bash
-heytea-sticker test --eraser-button 960,2300 --pen-button 840,2300
+heytea-sticker test
 ```
 
 More examples:
@@ -223,7 +225,7 @@ The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 
 | find it from a screenshot | `--canvas auto`, `--screenshot FILE`, `detect` | the phone's screen, or a screenshot file |
 | How the pen moves | `--method` | `swipe`, `continuous` or `fast` |
 | Swipe time | `--swipe-ms` | ms |
-| Eraser X/Y, Pen X/Y | `--eraser-button X,Y`, `--pen-button X,Y` | px on the phone |
+| Eraser X/Y, Pen X/Y | `--eraser-button X,Y`, `--pen-button X,Y` | px on the phone (found with the canvas when not given) |
 | Extra taps after eraser/pen | `--eraser-taps`, `--pen-taps` | `"x,y; x,y"` |
 | Wait after switching, Button press | `--switch-wait`, `--press-ms` | s, ms |
 | Fast mode fields | `--touch-device`, `--touch-max X,Y`, `--screen W,H`, `--combine-events` | from `getevent -lp` |
