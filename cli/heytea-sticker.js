@@ -38,7 +38,7 @@ var PHONE = [
   { flag: 'brush', key: 'pen', type: 'num', min: 1, max: 100, def: 'found with the canvas (3 dp), else 6', web: 'Brush size (px)', help: 'brush width on the phone in px' },
   { flag: 'eraser', key: 'esz', type: 'num', min: 1, max: 100, def: 'same as the brush when found, else 8', web: 'Eraser size (px)', help: 'eraser width on the phone in px' },
   { flag: 'canvas', key: ['rx', 'ry', 'rw', 'rh'], type: 'list', n: 4, arg: 'L,T,W,H|auto', def: 'auto for draw and test, else 100,600,880,880', web: 'Left, Top, Width, Height', help: 'the sticker canvas on screen in px, or auto: find it on a phone screenshot' },
-  { flag: 'method', key: 'method', type: { swipe: 'sw', continuous: 'mo', fast: 'fe' }, web: 'How the pen moves', help: 'swipe (any Android), continuous (Android 10+), fast (sendevent)' },
+  { flag: 'method', key: 'method', type: { swipe: 'sw', continuous: 'mo', fast: 'fe' }, web: 'How the pen moves', help: 'continuous = aimed motion events, exact (Android 10+); swipe = there and back (any Android); fast = sendevent (needs root on most phones)' },
   { flag: 'swipe-ms', key: 'dur', type: 'num', min: 1, max: 5000, web: 'Swipe time (ms)', help: 'ms per line (at least 80; HeyTea cuts the end off faster ones), swipe method' },
   { flag: 'eraser-button', key: ['ex', 'ey'], type: 'list', n: 2, web: 'Eraser X, Y', def: 'found with the canvas, else 0,0 = switch by hand', help: 'X,Y of the eraser button' },
   { flag: 'pen-button', key: ['tx', 'ty'], type: 'list', n: 2, web: 'Pen X, Y', def: 'found with the canvas', help: 'X,Y of the pen button' },

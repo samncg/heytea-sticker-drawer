@@ -100,22 +100,18 @@ The same for both tools:
 
 How the pen moves:
 
-- **swipe**: `input swipe`, works on any Android;
-- **continuous**: `input motionevent`, Android 10+;
-- **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`.
+- **continuous** (default): `input motionevent`, Android 10+, aimed so lines come out exact (below);
+- **swipe**: `input swipe`, any Android, each line drawn there and back;
+- **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`. Many phones refuse it without root.
 
-HeyTea doesn't draw every touch the way it is sent, so the script works around two things measured on a phone:
+HeyTea doesn't draw touches the way they are sent, so the script works around two things, both measured on a phone:
 
-- **The end of every stroke is left off.** A stroke always starts in the right place, but the last 20 to 30 ms before the finger lifts are not drawn. With commands back to back, 253 px lines lost this much at the end:
+- **The pen trails the finger.** HeyTea smooths every stroke: for each touch event it reads, the pen moves halfway from where it is towards the finger, and lifting the finger doesn't move it any further. A press, one move and a lift draws exactly half the line. So each move is aimed at twice the step, `pen + 2 × (target − pen)`, and the pen lands exactly on the target: tested on lines, line ends at the canvas edge (the finger may overshoot past the canvas) and the eraser, all exact to the round tip. Each move is a separate `input motionevent` command, about 120 ms each, so HeyTea reads every one however full the canvas gets. Dots are single taps, which always come out whole.
 
-  | Line time | typical | worst |
-  |---|---|---|
-  | 40 ms | 124 px | 144 px (57%) |
-  | 80 ms | 60 px | 96 px (38%) |
-  | 120 ms | 49 px | 68 px (27%) |
+  Swipes don't work as well. HeyTea reads a swipe about once per screen frame, and a canvas full of strokes renders slowly, so a swipe loses more of its end as the drawing grows: 253 px lines at 100 ms lost about 50 px on a fresh canvas but 189 px once 6,500 strokes were on it, and some vanished. The swipe method still draws each line there and back and never faster than 80 ms (100 by default, `--swipe-ms`), which works on a light canvas.
+- **A touch that starts outside the canvas is ignored**, even 2 px outside. The planner lets strokes at the edges reach a little past the canvas so the edge is fully inked, and those strokes vanished, leaving white bands along the edges. Every point is kept on the canvas; the round brush tip still reaches the edge.
 
-  So every line is drawn there and back, and never faster than 80 ms (100 ms by default, `--swipe-ms` or "Line time"): each pass starts exactly right and loses less than half, and the return pass starts where the first one's end went missing, so together they cover the line (120 of 120 test lines came out complete at 80, 100 and 120 ms). Dots are never cut, so they are drawn once, quickly.
-- **A touch that starts outside the canvas is ignored**, even 2 px outside. The planner lets strokes at the edges reach a little past the canvas so the edge is fully inked, and those strokes vanished, leaving white bands along the edges. Every point is now kept on the canvas; the round brush tip still reaches the edge.
+Each script also picks the Brush before its first stroke: a run that starts with the eraser selected would erase its first tile instead of drawing it.
 
 To check a phone, `heytea-sticker test` draws a line, erases a gap and draws another.
 
@@ -240,8 +236,8 @@ The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 
 | Brush size, Eraser size | `--brush`, `--eraser` | px on the phone |
 | Left, Top, Width, Height | `--canvas L,T,W,H` | px on the phone |
 | find it from a screenshot | `--canvas auto`, `--screenshot FILE`, `detect` | the phone's screen, or a screenshot file |
-| How the pen moves | `--method` | `swipe`, `continuous` or `fast` |
-| Line time | `--swipe-ms` | ms per line, at least 80 (100 by default) |
+| How the pen moves | `--method` | `continuous` (default), `swipe` or `fast` |
+| Line time (swipe method) | `--swipe-ms` | ms per line, at least 80 (100 by default) |
 | Eraser X/Y, Pen X/Y | `--eraser-button X,Y`, `--pen-button X,Y` | px on the phone (found with the canvas when not given) |
 | Extra taps after eraser/pen | `--eraser-taps`, `--pen-taps` | `"x,y; x,y"` |
 | Wait after switching, Button press | `--switch-wait`, `--press-ms` | s, ms |
