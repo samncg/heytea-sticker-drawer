@@ -113,6 +113,14 @@ HeyTea doesn't draw touches the way they are sent, so the script works around tw
 
 Each script also picks the Brush before its first stroke: a run that starts with the eraser selected would erase its first tile instead of drawing it.
 
+While it draws, the script keeps one line up to date in the terminal:
+
+```text
+[##########--------------]  42%  31m 05s left  eraser | 12,480/29,712 strokes
+```
+
+Progress is weighted by how long each command takes, so it moves evenly. Time left starts from the plan's estimate, and after the first 20 seconds comes from the drawing's own pace, so it follows the phone when it slows down on a full canvas. At the end it prints how long the drawing took.
+
 To check a phone, `heytea-sticker test` draws a line, erases a gap and draws another.
 
 ### Lining up the canvas
@@ -172,7 +180,7 @@ Pixel sweep · 79% match
 settings: --no-match --mode pixel-sweep --contrast -30 --midtones 140 --passes 7
 ```
 
-Draw it on the phone. It checks for `adb` and the phone first, waits for you to press Enter with the canvas open, finds the canvas on a screenshot, plans for it, pushes the script and draws (Ctrl+C stops it):
+Draw it on the phone. It checks for `adb` and the phone first, waits for you to press Enter with the canvas open, finds the canvas on a screenshot, plans for it, pushes the script and draws, with a progress bar and the time left (Ctrl+C stops it):
 
 ```bash
 heytea-sticker draw photo.jpg
