@@ -75,6 +75,7 @@ var HELP = [
   '  heytea-sticker script <image> [options]    plan, then write the ADB shell script (draw.sh)',
   '  heytea-sticker test [options]              draw the tool-switch test on the phone',
   '  heytea-sticker detect [screenshot]         find the sticker canvas on the phone screen (or a screenshot)',
+  '  heytea-sticker resume                      carry on with the last drawing from where it was stopped',
   '  heytea-sticker devices                     list ADB devices',
   '',
   'By default the tone settings are auto-matched, exactly like the web page: the pixel sweep is drawn',
@@ -446,12 +447,15 @@ function drawOnPhone(dev, text, name, vals, asked) {
   var r = runAdb(dev.bin, s.concat(['push', tmp, remote]));
   fs.unlinkSync(tmp);
   if (r.status !== 0) fail('adb push failed:\n' + (r.stderr || r.stdout).trim());
-  return (asked ? Promise.resolve() : askReady(vals)).then(function () {
-    log('Drawing. Press Ctrl+C to stop.');
-    var t0 = Date.now(), p = runAdb(dev.bin, s.concat(['shell', 'sh', remote]), { stdio: 'inherit' });
-    if (p.status !== 0) fail('the script stopped with exit code ' + p.status + '.');
-    log('Done in ' + fmtTime((Date.now() - t0) / 1000) + '.');
-  });
+  return (asked ? Promise.resolve() : askReady(vals)).then(function () { runOnPhone(dev, remote, []); });
+}
+// run a script already on the phone; the script draws its own progress bar
+function runOnPhone(dev, remote, args) {
+  log('Drawing. Press Ctrl+C to stop; "heytea-sticker resume" carries on later.');
+  var p = runAdb(dev.bin, ['-s', dev.serial, 'shell', 'sh', remote].concat(args), { stdio: 'inherit' });
+  if (p.status === 130 || p.signal) { log('Stopped. Carry on where it left off with: heytea-sticker resume'); process.exit(130); }
+  if (p.status !== 0) fail('the script stopped with exit code ' + p.status + '.');
+  if (process.stderr.isTTY) process.stderr.write('\x07');   // a beep when the drawing is done
 }
 
 /* ---------- commands ---------- */
@@ -466,7 +470,7 @@ function main() {
   }
   var cmd = pos[0];
   if (vals.help || !cmd || cmd === 'help') { process.stdout.write(HELP); return; }
-  if (['preview', 'draw', 'script', 'test', 'detect', 'devices'].indexOf(cmd) < 0) {
+  if (['preview', 'draw', 'script', 'test', 'detect', 'resume', 'devices'].indexOf(cmd) < 0) {
     if (fs.existsSync(cmd)) fail('say what to do with ' + cmd + ': heytea-sticker preview ' + cmd + '  or  heytea-sticker draw ' + cmd, 2);
     fail('unknown command "' + cmd + '". Run heytea-sticker --help.', 2);
   }
@@ -483,6 +487,14 @@ function main() {
   if (vals.canvas === 'auto') delete vals.canvas;
   if (cmd === 'detect' && pos[1] && !vals.screenshot) vals.screenshot = pos[1];
   var cfg = settingsFor(vals), P = cfg.P, Ph = cfg.Ph;
+
+  if (cmd === 'resume') {
+    // carry on with the last drawing sent to the phone, from where it stopped
+    var rd = pickDevice(vals), chk = runAdb(rd.bin, ['-s', rd.serial, 'shell', 'ls /sdcard/draw.sh /sdcard/.heytea-draw-progress']);
+    if (!/draw\.sh/.test(chk.stdout)) fail('there is no drawing on the phone to resume (/sdcard/draw.sh). Start one with: heytea-sticker draw <image>');
+    if (!/heytea-draw-progress/.test(chk.stdout)) log('The last drawing finished or never started; it will start from the beginning.');
+    return askReady(vals).then(function () { runOnPhone(rd, '/sdcard/draw.sh', ['resume']); });
+  }
 
   if (cmd === 'detect') {
     return screenAndCanvas(vals, vals.screenshot ? null : pickDevice(vals)).then(function (d) {

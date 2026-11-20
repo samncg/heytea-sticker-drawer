@@ -123,6 +123,13 @@ While it draws, the script keeps one line up to date in the terminal:
 
 Progress is weighted by how long each command takes, so it moves evenly. Time left starts from the plan's estimate, and after the first 20 seconds comes from the drawing's own pace, so it follows the phone when it slows down on a full canvas. At the end it prints how long the drawing took. The bar is in colour; `adb shell "NO_COLOR=1 sh /sdcard/draw.sh"` leaves the colours out.
 
+A long drawing also looks after itself:
+
+- **The screen stays on** while it draws (Android's "stay on while plugged in"), and the setting goes back to what it was when the drawing ends or is stopped.
+- **It pauses when HeyTea leaves the screen**, for a call, the notification shade or another app, so no strokes land elsewhere. It carries on by itself, picking the right tool again, once the sticker canvas is back; time spent paused doesn't count towards the time left.
+- **It can be resumed.** Every half percent or so, between strokes, it saves how far it got and which tool it was using. After stopping it (Ctrl+C, a dropped cable), `adb shell sh /sdcard/draw.sh resume` or `heytea-sticker resume` carries on from there. The saved place belongs to that one script, so a new drawing starts from the beginning.
+- **The phone vibrates** when it is done, and the command line beeps.
+
 To check a phone, `heytea-sticker test` draws a line, erases a gap and draws another.
 
 ### Lining up the canvas
@@ -218,6 +225,7 @@ heytea-sticker draw photo.jpg --no-match --contrast -30 --midtones 140 --passes 
 | `draw <image>` | plan, then draw on the phone over ADB (`-o` also saves the PNG) |
 | `script <image>` | plan, then write the ADB script (`-o`, default `draw.sh`) to run yourself |
 | `test` | draw the tool-switch test on the phone |
+| `resume` | carry on with the last drawing from where it was stopped |
 | `detect [screenshot]` | find the canvas on the phone screen, or on a screenshot (`-o` saves it outlined) |
 | `devices` | list what ADB sees |
 
