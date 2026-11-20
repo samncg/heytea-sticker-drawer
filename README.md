@@ -104,7 +104,20 @@ How the pen moves:
 - **continuous**: `input motionevent`, Android 10+;
 - **fast**: raw touch events through `sendevent`, which needs the touchscreen device and its range from `adb shell getevent -lp`.
 
-Whichever way the pen moves, every line is drawn there and back. HeyTea smooths a stroke through the midpoints between touch events, so the last stretch before the finger lifts is never drawn: on a test phone a 40 ms swipe lost about a third of its length at the end (87 px of 252), and slower swipes less (43 px at 100 ms, 10 px at 200 ms). Each pass starts exactly where it should, and the return pass starts where the first one's end went missing, so the two cover the whole line, at two quick swipes instead of one slow one. Taps come out whole and are drawn once.
+HeyTea doesn't draw every touch the way it is sent, so the script works around two things measured on a phone:
+
+- **The end of every stroke is left off.** A stroke always starts in the right place, but the last 20 to 30 ms before the finger lifts are not drawn. With commands back to back, 253 px lines lost this much at the end:
+
+  | Line time | typical | worst |
+  |---|---|---|
+  | 40 ms | 124 px | 144 px (57%) |
+  | 80 ms | 60 px | 96 px (38%) |
+  | 120 ms | 49 px | 68 px (27%) |
+
+  So every line is drawn there and back, and never faster than 80 ms (100 ms by default, `--swipe-ms` or "Line time"): each pass starts exactly right and loses less than half, and the return pass starts where the first one's end went missing, so together they cover the line (120 of 120 test lines came out complete at 80, 100 and 120 ms). Dots are never cut, so they are drawn once, quickly.
+- **A touch that starts outside the canvas is ignored**, even 2 px outside. The planner lets strokes at the edges reach a little past the canvas so the edge is fully inked, and those strokes vanished, leaving white bands along the edges. Every point is now kept on the canvas; the round brush tip still reaches the edge.
+
+To check a phone, `heytea-sticker test` draws a line, erases a gap and draws another.
 
 ### Lining up the canvas
 
@@ -228,7 +241,7 @@ The defaults are the web page's: pixel sweep, filling the canvas, an 880 × 880 
 | Left, Top, Width, Height | `--canvas L,T,W,H` | px on the phone |
 | find it from a screenshot | `--canvas auto`, `--screenshot FILE`, `detect` | the phone's screen, or a screenshot file |
 | How the pen moves | `--method` | `swipe`, `continuous` or `fast` |
-| Swipe time | `--swipe-ms` | ms |
+| Line time | `--swipe-ms` | ms per line, at least 80 (100 by default) |
 | Eraser X/Y, Pen X/Y | `--eraser-button X,Y`, `--pen-button X,Y` | px on the phone (found with the canvas when not given) |
 | Extra taps after eraser/pen | `--eraser-taps`, `--pen-taps` | `"x,y; x,y"` |
 | Wait after switching, Button press | `--switch-wait`, `--press-ms` | s, ms |
