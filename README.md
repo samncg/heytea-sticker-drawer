@@ -116,10 +116,12 @@ Each script also picks the Brush before its first stroke: a run that starts with
 While it draws, the script keeps one line up to date in the terminal:
 
 ```text
-[##########--------------]  42%  31m 05s left  eraser | 12,480/29,712 strokes
+  HeyTea sticker drawer  29,712 strokes · about 1h 48m
+
+  ██████████▏░░░░░░░░░░░░░    42%   31m 05s left   ◌ eraser   12,480 / 29,712
 ```
 
-Progress is weighted by how long each command takes, so it moves evenly. Time left starts from the plan's estimate, and after the first 20 seconds comes from the drawing's own pace, so it follows the phone when it slows down on a full canvas. At the end it prints how long the drawing took.
+Progress is weighted by how long each command takes, so it moves evenly. Time left starts from the plan's estimate, and after the first 20 seconds comes from the drawing's own pace, so it follows the phone when it slows down on a full canvas. At the end it prints how long the drawing took. The bar is in colour; `adb shell "NO_COLOR=1 sh /sdcard/draw.sh"` leaves the colours out.
 
 To check a phone, `heytea-sticker test` draws a line, erases a gap and draws another.
 
