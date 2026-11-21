@@ -107,16 +107,24 @@
   // plan whatever needs it, the selected picture first, one at a time
   function planLoop() {
     if (planning) return planning;
-    planning = (async function () {
-      for (;;) {
-        var sel = selected(), next = sel && !planned(sel) ? sel : S.items.filter(function (i) { return !planned(i) && i.status !== 'done'; })[0];
-        if (!next) break;
-        try { await planItem(next); } catch (e) { next._error = e.message; next._plan = { key: planKey(next), failed: true }; toast('Could not plan ' + next.name + ': ' + e.message); }
-        render();
+    var run = (async function () {
+      // wait a tick first: with nothing to plan the loop would otherwise finish before `planning` is set,
+      // leave the finished promise in it, and every later call would return that instead of planning
+      await 0;
+      try {
+        for (;;) {
+          var sel = selected(), next = sel && !planned(sel) ? sel : S.items.filter(function (i) { return !planned(i) && i.status !== 'done'; })[0];
+          if (!next) break;
+          try { await planItem(next); } catch (e) { next._error = e.message; next._plan = { key: planKey(next), failed: true }; toast('Could not plan ' + next.name + ': ' + e.message); }
+          render();
+        }
+      } finally {
+        // always let go, even if something above threw, so the next call starts a fresh loop
+        if (planning === run) planning = null;
       }
-      planning = null;
     })();
-    return planning;
+    planning = run;
+    return run;
   }
   async function planItem(item) {
     item._busy = needsMatch(item) ? 'Finding the best settings… 0%' : 'Planning…';
