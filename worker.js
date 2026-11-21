@@ -1,5 +1,5 @@
 /* Runs the planner and the auto-match search off the main thread. */
-importScripts('engine.js?v=48');
+importScripts('engine.js?v=49');
 
 var E = self.StickerEngine, img = null;
 function makeCanvas(w, h) { return new OffscreenCanvas(w, h); }
@@ -24,7 +24,7 @@ onmessage = function (e) {
       // the candidate being tried goes to the page at most twice a second, for the live preview
       var tryAt = 0;
       var r = E.autoMatch(img, m.P, {
-        makeCanvas: makeCanvas,
+        makeCanvas: makeCanvas, modes: m.modes,   // the styles to try (default: the pixel sweep)
         onTry: function (P) {
           // on a fixed half-second beat, so a slow candidate does not push the next update back
           var t = Date.now();

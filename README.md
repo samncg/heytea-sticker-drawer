@@ -4,10 +4,11 @@ Turn any picture into a drawing for the HeyTea app's custom sticker canvas, then
 
 **Try it:** [ncgg.dev/sticker](https://ncgg.dev/sticker/) · runs entirely in the browser, the image never leaves your device.
 
-There are two ways to use it, both running the same engine with the same settings:
+There are three ways to use it, all running the same engine with the same settings:
 
 - **[the web UI](#web-ui)**: drop in a picture, tweak it with live previews, download the script for the phone;
-- **[the command line](#command-line)**: `heytea-sticker draw photo.jpg` plans the drawing and draws it on the connected phone in one step, or `preview` writes a PNG without a phone.
+- **[the command line](#command-line)**: `heytea-sticker draw photo.jpg` plans the drawing and draws it on the connected phone in one step, or `preview` writes a PNG without a phone;
+- **[the Windows app](desktop/README.md)**: a queue of pictures, presets of your own, and one Start button that lines up the phone and draws them one after another with live progress, pause and resume.
 
 ![The same picture drawn four ways: the original, one 6 px brush pass, one dithered pass, and the brush and eraser sweep](docs/brush.png)
 
@@ -276,5 +277,6 @@ The one difference is how the picture is decoded. The command line reads it like
 | `worker.js` | runs planning and auto-match off the page's main thread |
 | `serve.js` | the local web server behind `npm start` |
 | `cli/heytea-sticker.js` | the command line: arguments, image loading, PNG preview, ADB |
+| `desktop/` | the Windows app (Rust and Tauri): queue, presets, Start, progress ([its README](desktop/README.md)) |
 
 Part of [ncgg.dev](https://ncgg.dev).

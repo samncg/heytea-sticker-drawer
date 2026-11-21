@@ -1352,18 +1352,23 @@
     "t() { if [ \"$1\" -ge 3600 ]; then printf '%dh %02dm' $(( $1 / 3600 )) $(( $1 % 3600 / 60 )); elif [ \"$1\" -ge 60 ]; then printf '%dm %02ds' $(( $1 / 60 )) $(( $1 % 60 )); else printf '%ds' \"$1\"; fi; }",
     // bar <per mille done> <filled part> <empty part> <planned seconds left> <tool> <strokes text>
     'bar() { e=$(( $(date +%s) - T0 - PT )); if [ $(( $1 - P0 )) -ge 30 ] && [ "$e" -ge 20 ]; then l=$(( e * (1000 - $1) / ($1 - P0 + 1) )); else l=$4; fi; ' +
+      'if [ -n "$HEYTEA_PROGRESS" ]; then echo "@P $1 $l $e $5 $6"; return; fi; ' +
       'if [ "$5" = eraser ]; then tc=$E; ic="◌"; else tc=$B; ic="✏"; fi; ' +
       "printf '\\r  %s%s%s%s%s  %s%4d%%%s   %s%s left%s   %s%s %s%s   %s%s%s\\033[K' " +
       '"$A" "$2" "$G" "$3" "$R" "$B" $(( $1 / 10 )) "$R" "$C" "$(t $l)" "$R" "$tc" "$ic" "$5" "$R" "$D" "$6" "$R"; }',
     // is HeyTea the window in front?
     'front() { dumpsys window 2>/dev/null | grep mCurrentFocus | grep -q com.heytea; }',
-    // ck <checkpoint> <per mille> <tool>: save progress; wait while HeyTea isn't in front
-    'ck() { echo "$ID $1 $2 $3" > $PF; if ! front; then p0=$(date +%s); ' +
-      "printf '\\r  %s⏸  Paused: HeyTea is not on screen. Open the sticker canvas to carry on.%s\\033[K' \"$E\" \"$R\"; " +
-      'while ! front; do sleep 2; done; sleep 1; tool_$3; PT=$(( PT + $(date +%s) - p0 )); fi; }',
+    // say <machine word> <text>: a state change, as a machine line for an app or on the bar's line
+    "say() { if [ -n \"$HEYTEA_PROGRESS\" ]; then echo \"@$1\"; elif [ -n \"$2\" ]; then printf '\\r  %s%s%s\\033[K' \"$E\" \"$2\" \"$R\"; fi; }",
+    // ck <checkpoint> <per mille> <tool>: save progress; wait while paused (/sdcard/.heytea-pause, set by an app)
+    // or while HeyTea isn't in front
+    'ck() { echo "$ID $1 $2 $3" > $PF; ' +
+      'if [ -f /sdcard/.heytea-pause ]; then p0=$(date +%s); say PAUSED "⏸  Paused."; while [ -f /sdcard/.heytea-pause ]; do sleep 1; done; sleep 1; tool_$3; PT=$(( PT + $(date +%s) - p0 )); say RUN; fi; ' +
+      'if ! front; then p0=$(date +%s); say WAIT "⏸  Paused: HeyTea is not on screen. Open the sticker canvas to carry on."; ' +
+      'while ! front; do sleep 2; done; sleep 1; tool_$3; PT=$(( PT + $(date +%s) - p0 )); say RUN; fi; }',
     'stay=$(settings get global stay_on_while_plugged_in 2>/dev/null); svc power stayon usb 2>/dev/null',
     'restore() { if [ -n "$stay" ] && [ "$stay" != null ]; then settings put global stay_on_while_plugged_in "$stay" 2>/dev/null; else svc power stayon false 2>/dev/null; fi; }',
-    "stopped() { restore; printf '\\n\\n  %sStopped.%s Carry on where it left off with:  adb shell sh /sdcard/draw.sh resume\\n\\n' \"$E\" \"$R\"; exit 130; }",
+    "stopped() { restore; [ -n \"$HEYTEA_PROGRESS\" ] && echo @STOPPED; printf '\\n\\n  %sStopped.%s Carry on where it left off with:  adb shell sh /sdcard/draw.sh resume\\n\\n' \"$E\" \"$R\"; exit 130; }",
     'trap stopped INT TERM HUP'
   ];
   function withProgress(L, nStrokes, Ph) {
@@ -1409,7 +1414,8 @@
       'P0=${P0:-0}'
     ];
     out.push(bar(1000), 'restore; rm -f $PF', "printf '\\n\\n  %s✔ Finished in %s%s\\n\\n' \"$OK\" \"$(t $(( $(date +%s) - T0 )))\" \"$R\"",
-      'cmd vibrator_manager synced oneshot 700 >/dev/null 2>&1 || cmd vibrator vibrate 700 >/dev/null 2>&1');
+      'cmd vibrator_manager synced oneshot 700 >/dev/null 2>&1 || cmd vibrator vibrate 700 >/dev/null 2>&1',
+      '[ -n "$HEYTEA_PROGRESS" ] && echo "@DONE $(( $(date +%s) - T0 ))"');
     return L.slice(0, head).concat(BAR_FN, pre, out);
   }
 

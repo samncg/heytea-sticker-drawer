@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sticker Drawer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="brand__mark" aria-hidden="true"></span>Sticker Drawer</div>
+    <div class="top__right">
+      <button class="chip" id="phone-chip" type="button" title="Phone">
+        <i class="chip__dot" id="phone-dot"></i><span id="phone-text">Looking for a phone…</span>
+      </button>
+      <button class="icon-btn" id="settings-btn" type="button" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 6.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8Zm7 4.6v-2.4l-2-.4-.5-1.2 1.2-1.7-1.7-1.7-1.7 1.2-1.2-.5-.4-2H8.8l-.4 2-1.2.5-1.7-1.2-1.7 1.7 1.2 1.7-.5 1.2-2 .4v2.4l2 .4.5 1.2-1.2 1.7 1.7 1.7 1.7-1.2 1.2.5.4 2h2.4l.4-2 1.2-.5 1.7 1.2 1.7-1.7-1.2-1.7.5-1.2 2-.4Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="queue" id="queue">
+      <div class="queue__head">
+        <h2>Queue</h2>
+        <span class="queue__count" id="queue-count"></span>
+      </div>
+      <ol class="queue__list" id="queue-list"></ol>
+      <label class="add">
+        <input type="file" id="file-input" accept="image/*" multiple hidden>
+        <span>+ Add pictures</span>
+      </label>
+      <p class="queue__hint">or drop them anywhere</p>
+    </aside>
+
+    <section class="work">
+      <div class="empty" id="empty">
+        <div class="empty__art" aria-hidden="true"></div>
+        <h1>Draw a picture on your HeyTea sticker</h1>
+        <p>Add pictures to the queue, pick a preset, and press Start. The phone draws them one after another.</p>
+        <label class="btn btn--primary">
+          <input type="file" id="file-input-2" accept="image/*" multiple hidden>Add pictures
+        </label>
+      </div>
+
+      <div class="item" id="item" hidden>
+        <div class="item__head">
+          <input class="item__name" id="item-name" spellcheck="false" aria-label="Name">
+          <button class="text-btn" id="remove-item" type="button">Remove</button>
+        </div>
+        <div class="previews">
+          <figure class="pane">
+            <div class="pane__box"><canvas id="pic" width="10" height="10"></canvas></div>
+            <figcaption>Picture</figcaption>
+          </figure>
+          <figure class="pane">
+            <div class="pane__box">
+              <canvas id="draw-preview" width="10" height="10"></canvas>
+              <div class="pane__busy" id="plan-busy" hidden><span class="spinner"></span><span id="plan-busy-text">Finding the best settings…</span></div>
+            </div>
+            <figcaption>Drawing <span class="muted" id="plan-meta"></span></figcaption>
+          </figure>
+        </div>
+
+        <div class="settings-grid">
+          <div class="field">
+            <span class="field__label">Preset</span>
+            <div class="preset">
+              <select id="preset"></select>
+              <button class="text-btn" id="save-preset" type="button">Save as preset</button>
+              <button class="text-btn text-btn--danger" id="delete-preset" type="button" hidden>Delete</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field__label">Picture</span>
+            <div class="seg" role="group" aria-label="Picture fit">
+              <button type="button" data-fit="cover">Fill the sticker</button>
+              <button type="button" data-fit="contain">Fit inside</button>
+            </div>
+          </div>
+        </div>
+
+        <details class="adjust" id="adjust">
+          <summary>Adjust <span class="muted" id="adjust-note"></span></summary>
+          <div class="sliders" id="sliders"></div>
+          <button class="text-btn" id="reset-adjust" type="button">Reset to the preset</button>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bar" id="bar">
+    <div class="bar__track"><i id="bar-fill"></i></div>
+    <div class="bar__row">
+      <div class="bar__status">
+        <strong id="status-main">Add pictures to start</strong>
+        <span id="status-sub"></span>
+      </div>
+      <div class="bar__actions">
+        <button class="btn" id="skip-btn" type="button" hidden>Draw now</button>
+        <button class="btn" id="stop-btn" type="button" hidden>Stop</button>
+        <button class="btn" id="pause-btn" type="button" hidden>Pause</button>
+        <button class="btn btn--primary btn--start" id="start-btn" type="button" disabled>Start</button>
+      </div>
+    </div>
+  </footer>
+
+  <dialog class="sheet" id="settings">
+    <form method="dialog">
+      <h3>Settings</h3>
+      <label class="field">
+        <span class="field__label">adb</span>
+        <input id="adb-path" placeholder="Found automatically" spellcheck="false">
+        <small id="adb-note" class="muted"></small>
+      </label>
+      <div class="field">
+        <span class="field__label">Sticker canvas</span>
+        <p class="muted" id="lineup-note">Not lined up yet. It lines up by itself when you press Start.</p>
+        <button class="btn" id="lineup-btn" type="button">Line up now</button>
+      </div>
+      <div class="sheet__actions"><button class="btn btn--primary" value="ok">Done</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="preset-dialog">
+    <form method="dialog">
+      <h3>Save as preset</h3>
+      <label class="field">
+        <span class="field__label">Name</span>
+        <input id="preset-name" required maxlength="40" spellcheck="false">
+      </label>
+      <p class="muted">Keeps this style, tone, fit and detail, so other pictures can use them.</p>
+      <div class="sheet__actions">
+        <button class="btn" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn btn--primary" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="vendor/engine.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
