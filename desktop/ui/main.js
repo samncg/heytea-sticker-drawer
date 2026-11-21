@@ -39,7 +39,7 @@
 
   var S = { items: [], presets: [], selected: null, lastPreset: 'best', lineup: null, settings: { adb: '' } };
   var device = null, adbOk = false;
-  var run = { active: false, state: 'idle', itemId: null, pm: 0, left: 0, tool: 'brush', strokes: '', stopReq: false, skip: false, lastWord: '', endWait: null };
+  var run = { active: false, state: 'idle', itemId: null, pm: 0, left: 0, tool: 'brush', strokes: '', done: 0, stopReq: false, skip: false, lastWord: '', endWait: null };
 
   function presets() { return BUILT_IN.concat(S.presets); }
   function presetOf(item) { return presets().filter(function (p) { return p.id === item.presetId; })[0] || BUILT_IN[0]; }
@@ -107,7 +107,7 @@
   // plan whatever needs it, the selected picture first, one at a time
   function planLoop() {
     if (planning) return planning;
-    var run = (async function () {
+    var loop = (async function () {
       // wait a tick first: with nothing to plan the loop would otherwise finish before `planning` is set,
       // leave the finished promise in it, and every later call would return that instead of planning
       await 0;
@@ -120,11 +120,11 @@
         }
       } finally {
         // always let go, even if something above threw, so the next call starts a fresh loop
-        if (planning === run) planning = null;
+        if (planning === loop) planning = null;
       }
     })();
-    planning = run;
-    return run;
+    planning = loop;
+    return loop;
   }
   async function planItem(item) {
     item._busy = needsMatch(item) ? 'Finding the best settings… 0%' : 'Planning…';
@@ -250,6 +250,8 @@
         }
         // 3. draw it
         item.status = 'drawing'; run.itemId = item.id; run.pm = resume ? +onPhone.split(' ')[2] || 0 : 0; run.left = item._plan.est; run.lastWord = '';
+        run.done = resume ? item.done || 0 : 0;
+        if (!resume) item.done = 0;
         run.state = 'drawing'; render(); save();
         var code = await drawJob(script, resume);
         if (run.lastWord === 'DONE') { item.status = 'done'; item.pm = 1000; toast(item.name + ' is done.'); }
@@ -281,8 +283,10 @@
     run.lastWord = word;
     if (word === 'P') {
       run.pm = +parts[1]; run.left = +parts[2]; run.tool = parts[4]; run.strokes = parts.slice(5).join(' ');
+      // "1,234 / 5,678": strokes drawn so far, in the same order as the plan
+      run.done = parseInt(run.strokes.split('/')[0].replace(/[^0-9]/g, ''), 10) || 0;
       if (run.state !== 'pausing') run.state = 'drawing';
-      var it = itemById(run.itemId); if (it) it.pm = run.pm;
+      var it = itemById(run.itemId); if (it) { it.pm = run.pm; it.done = run.done; }
     } else if (word === 'PAUSED') run.state = 'paused';
     else if (word === 'WAIT') run.state = 'away';
     else if (word === 'RUN') run.state = 'drawing';
@@ -408,8 +412,10 @@
     busy.hidden = !item._busy && !!p;
     $('#plan-busy-text').textContent = item._busy || 'Waiting to plan…';
     if (p && !p.failed) {
-      $('#plan-meta').textContent = '· ' + Math.round(p.res.match) + '% match · ' + fmtN(p.res.strokes.length) + ' strokes · about ' + fmtT(p.est);
-      drawPreview(p);
+      var sd = strokesDone(item, p);
+      $('#plan-meta').textContent = '· ' + Math.round(p.res.match) + '% match · ' +
+        (sd === null ? fmtN(p.res.strokes.length) + ' strokes · about ' + fmtT(p.est) : fmtN(sd) + ' of ' + fmtN(p.res.strokes.length) + ' strokes drawn');
+      drawPreview(p, item);
     } else $('#plan-meta').textContent = p && p.failed ? '· could not plan this picture' : '';
   }
   // the picture as it will be fitted onto the sticker: cropped to fill it, or inside it on paper
@@ -428,17 +434,13 @@
     x.imageSmoothingQuality = 'high';
     x.drawImage(im, (W - im.naturalWidth * s) / 2, (H - im.naturalHeight * s) / 2, im.naturalWidth * s, im.naturalHeight * s);
   }
-  var drawn = null;
-  function drawPreview(p) {
-    if (drawn === p) return;
-    drawn = p;
-    var cv = $('#draw-preview'), res = p.res, P = p.P, sc = Math.max(1, Math.round(900 / Math.max(res.W, res.H)));
-    cv.width = res.W * sc; cv.height = res.H * sc;
-    var x = cv.getContext('2d'), cur = -1;
-    x.fillStyle = '#f3f3f3'; x.fillRect(0, 0, cv.width, cv.height);
+  // strokes from..to onto a 2D context, black brush and paper-coloured eraser, like the phone draws them
+  function paintStrokes(x, p, sc, from, to) {
+    var res = p.res, P = p.P, cur = -1;
     x.lineCap = x.lineJoin = 'round';
     x.beginPath();
-    res.strokes.forEach(function (s) {
+    for (var i = from; i < to; i++) {
+      var s = res.strokes[i];
       if (s.er !== cur) {
         if (cur !== -1) { x.stroke(); x.beginPath(); }
         x.strokeStyle = s.er ? '#f3f3f3' : '#111';
@@ -449,8 +451,46 @@
       x.moveTo((q[0][0] + 0.5) * sc, (q[0][1] + 0.5) * sc);
       for (var j = 1; j < q.length; j++) x.lineTo((q[j][0] + 0.5) * sc, (q[j][1] + 0.5) * sc);
       if (q.length === 1) x.lineTo((q[0][0] + 0.5) * sc + 0.01, (q[0][1] + 0.5) * sc);
-    });
+    }
     x.stroke();
+  }
+  function previewScale(res) { return Math.max(1, Math.round(900 / Math.max(res.W, res.H))); }
+  // how many strokes the phone has drawn: live while drawing, kept for a drawing that was stopped
+  function strokesDone(item, p) {
+    var n = p.res.strokes.length;
+    if (item.status === 'drawing' && run.itemId === item.id) return Math.min(n, run.done || 0);
+    if (item.status === 'stopped' && item.done) return Math.min(n, item.done);
+    return null;
+  }
+  var drawn = null, live = { p: null, idx: 0 };
+  function drawPreview(p, item) {
+    var done = strokesDone(item, p), cv = $('#draw-preview'), res = p.res, sc = previewScale(res), x;
+    if (done === null) {
+      // the finished drawing
+      if (drawn === p) return;
+      drawn = p; live.p = null;
+      cv.width = res.W * sc; cv.height = res.H * sc;
+      x = cv.getContext('2d');
+      x.fillStyle = '#f3f3f3'; x.fillRect(0, 0, cv.width, cv.height);
+      paintStrokes(x, p, sc, 0, res.strokes.length);
+      return;
+    }
+    // drawing in progress: the finished drawing as a faint ghost, the strokes done so far in ink on top
+    drawn = null;
+    x = cv.getContext('2d');
+    if (live.p !== p || done < live.idx) {
+      cv.width = res.W * sc; cv.height = res.H * sc;
+      if (!p._ghost) {
+        var g = document.createElement('canvas'); g.width = cv.width; g.height = cv.height;
+        var gx = g.getContext('2d'); gx.fillStyle = '#f3f3f3'; gx.fillRect(0, 0, g.width, g.height);
+        paintStrokes(gx, p, sc, 0, res.strokes.length);
+        p._ghost = g;
+      }
+      x.fillStyle = '#f3f3f3'; x.fillRect(0, 0, cv.width, cv.height);
+      x.globalAlpha = 0.2; x.drawImage(p._ghost, 0, 0); x.globalAlpha = 1;
+      live.p = p; live.idx = 0;
+    }
+    if (done > live.idx) { paintStrokes(x, p, sc, live.idx, done); live.idx = done; }
   }
 
   function renderBar() {
