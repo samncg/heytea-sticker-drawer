@@ -1156,8 +1156,12 @@
   var HEAD = ['#!/system/bin/sh', '[ -z "$DRAW_LF" ] && { tr -d "\\r" < "$0" > /sdcard/.draw_lf.sh; DRAW_LF=1 sh /sdcard/.draw_lf.sh "$@"; exit $?; } #'];
   // HeyTea ignores a touch that starts outside the canvas (the planner lets edge strokes reach a cell past it,
   // and those were dropped whole), so every point is kept on the canvas; the round tip still reaches the edge
-  function inX(Ph, v) { return Math.max(Ph.rx, Math.min(Ph.rx + Ph.rw - 1, v)); }
-  function inY(Ph, v) { return Math.max(Ph.ry, Math.min(Ph.ry + Ph.rh - 1, v)); }
+  // Touches also stay EDGE px inside the canvas: a canvas entered or found a couple of pixels too big put 423
+  // presses of one drawing just outside it, and HeyTea answered with a stray erased line from the canvas corner.
+  // The round tip (about 5 px across each way) still inks up to the edge from there.
+  var EDGE = 3;
+  function inX(Ph, v) { return Math.max(Ph.rx + EDGE, Math.min(Ph.rx + Ph.rw - 1 - EDGE, v)); }
+  function inY(Ph, v) { return Math.max(Ph.ry + EDGE, Math.min(Ph.ry + Ph.rh - 1 - EDGE, v)); }
   // HeyTea leaves off the last 20..32 ms of every stroke (measured with commands back to back: a 40 ms swipe of
   // 253 px lost 124 px typically and 144 at worst, 80 ms 60/96, 120 ms 49/68). Lines are drawn there and back
   // and take at least 80 ms, so neither pass loses half; taps are never cut and stay quick.
