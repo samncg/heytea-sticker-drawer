@@ -115,7 +115,7 @@
         for (;;) {
           var sel = selected(), next = sel && !planned(sel) ? sel : S.items.filter(function (i) { return !planned(i) && i.status !== 'done'; })[0];
           if (!next) break;
-          try { await planItem(next); } catch (e) { next._error = e.message; next._plan = { key: planKey(next), failed: true }; toast('Could not plan ' + next.name + ': ' + e.message); }
+          try { await planItem(next); } catch (e) { next._error = e.message; next._plan = { key: planKey(next), failed: true }; toast('Could not plan a picture: ' + e.message); }
           render();
         }
       } finally {
@@ -205,7 +205,11 @@
 
   /* ---------- drawing ---------- */
 
-  function pending() { return S.items.filter(function (i) { return i.status !== 'done'; }); }
+  // pictures being set up are drafts; Start moves one into the queue with its settings as they are then
+  function drafts() { return S.items.filter(function (i) { return i.status === 'draft'; }); }
+  function queueItems() { return S.items.filter(function (i) { return i.status !== 'draft'; }); }
+  function pending() { return S.items.filter(function (i) { return i.status !== 'done' && i.status !== 'draft'; }); }
+  function newId() { return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   async function start() {
     if (run.active) return;
     if (!device) { toast('Connect the phone by USB with USB debugging on.'); return; }
@@ -215,7 +219,9 @@
         if (run.stopReq) break;
         var item = pending()[0];
         if (!item) break;
-        select(item.id);
+        // show the picture being drawn, unless a draft is being set up
+        var cur = selected();
+        if (!cur || cur.status !== 'draft') select(item.id);
         // 1. the sticker canvas must be open with the Brush picked
         var look;
         for (;;) {
@@ -254,7 +260,7 @@
         if (!resume) item.done = 0;
         run.state = 'drawing'; render(); save();
         var code = await drawJob(script, resume);
-        if (run.lastWord === 'DONE') { item.status = 'done'; item.pm = 1000; toast(item.name + ' is done.'); }
+        if (run.lastWord === 'DONE') { item.status = 'done'; item.pm = 1000; toast('A picture is done.'); }
         else { item.status = 'stopped'; item.pm = run.pm; save(); render(); break; }
         save(); render();
         void code;
@@ -315,7 +321,7 @@
     Promise.all(list.map(readImage)).then(function (imgs) {
       var first = null;
       imgs.forEach(function (o) {
-        var item = { id: 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: o.name, img: o.url, presetId: S.lastPreset, fit: 'cover', adj: {}, status: 'ready' };
+        var item = { id: newId(), name: o.name, img: o.url, presetId: S.lastPreset, fit: 'cover', adj: {}, status: 'draft' };
         S.items.push(item);
         if (!first) first = item;
       });
@@ -342,32 +348,58 @@
   /* ---------- rendering ---------- */
 
   function select(id) { S.selected = id; save(); render(); planLoop(); }
-  function itemStatus(item) {
-    if (item.status === 'done') return ['Done', 'is-done'];
-    if (item.status === 'drawing') return [Math.floor((item.pm || 0) / 10) + '%', 'is-active'];
-    if (item.status === 'stopped') return ['Stopped ' + Math.floor((item.pm || 0) / 10) + '%', 'is-stopped'];
-    return null;
+  function pct(item) { return Math.floor((item.pm || 0) / 10) + '%'; }
+  function queueLine(item) {
+    if (item.status === 'done') return 'Done';
+    if (item.status === 'drawing') return 'Drawing · ' + pct(item);
+    if (item.status === 'stopped') return 'Stopped at ' + pct(item);
+    return 'Queued';
   }
   function itemSub(item) {
     var pre = presetOf(item).name, p = planned(item);
-    if (item._busy) return pre + ' · ' + (needsMatch(item) ? 'matching…' : 'planning…');
+    if (item.status === 'drawing' && run.itemId === item.id) return pre + ' · ' + fmtT(run.left) + ' left';
+    if (item.status === 'done') return pre;
+    if (item._busy) return pre + ' · planning…';
     if (p && !p.failed) return pre + ' · about ' + fmtT(p.est);
     return pre;
   }
+  var X_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
   function renderQueue() {
-    var ol = $('#queue-list');
-    ol.innerHTML = S.items.map(function (i) {
-      var st = itemStatus(i);
-      return '<li class="q' + (i.id === S.selected ? ' is-selected' : '') + '" draggable="true" data-id="' + i.id + '">' +
+    var q = queueItems();
+    $('#queue-list').innerHTML = q.map(function (i) {
+      return '<li class="q is-' + i.status + (i.id === S.selected ? ' is-selected' : '') + '" draggable="true" data-id="' + i.id + '">' +
         '<span class="q__thumb" style="background-image:url(' + i.img + ')"></span>' +
-        '<span><div class="q__name">' + esc(i.name) + '</div><div class="q__sub">' + esc(itemSub(i)) + '</div></span>' +
-        (st ? '<span class="q__state ' + st[1] + '">' + st[0] + '</span>' : '<span></span>') +
-        (i.status === 'drawing' ? '<i class="q__progress" style="transform:scaleX(' + (i.pm || 0) / 1000 + ')"></i>' : '') + '</li>';
+        '<span class="q__text"><span class="q__main">' + queueLine(i) + '</span><span class="q__sub">' + esc(itemSub(i)) + '</span></span>' +
+        (i.status === 'drawing' ? '<span></span>' : '<button class="q__x" type="button" data-remove aria-label="Remove from the queue" title="Remove from the queue">' + X_ICON + '</button>') +
+        (i.status === 'drawing' || i.status === 'stopped' ? '<i class="q__progress" style="transform:scaleX(' + (i.pm || 0) / 1000 + ')"></i>' : '') + '</li>';
     }).join('');
+    $('#queue-empty').hidden = q.length > 0;
     var left = pending().length;
-    $('#queue-count').textContent = S.items.length ? (left ? left + ' to draw' : 'all drawn') : '';
+    $('#queue-count').textContent = q.length ? (left ? left + ' to draw' : 'all drawn') : '';
+    // the pictures being set up, as tabs above the editor
+    $('#tab-list').innerHTML = drafts().map(function (i) {
+      var on = i.id === S.selected;
+      return '<span class="tab' + (on ? ' is-selected' : '') + '" data-id="' + i.id + '">' +
+        '<button class="tab__pick" type="button" aria-label="Set up this picture" aria-pressed="' + on + '" style="background-image:url(' + i.img + ')"></button>' +
+        '<button class="tab__x" type="button" data-remove aria-label="Remove this picture" title="Remove">' + X_ICON + '</button></span>';
+    }).join('');
   }
-  $('#queue-list').addEventListener('click', function (e) { var li = e.target.closest('.q'); if (li) select(li.dataset.id); });
+  $('#queue-list').addEventListener('click', function (e) {
+    var li = e.target.closest('.q'); if (!li) return;
+    if (e.target.closest('[data-remove]')) removeItem(li.dataset.id); else select(li.dataset.id);
+  });
+  $('#tab-list').addEventListener('click', function (e) {
+    var t = e.target.closest('.tab'); if (!t) return;
+    if (e.target.closest('[data-remove]')) removeItem(t.dataset.id); else select(t.dataset.id);
+  });
+  function removeItem(id) {
+    var item = itemById(id); if (!item) return;
+    if (item.status === 'drawing') { toast('Stop the drawing first.'); return; }
+    S.items.splice(S.items.indexOf(item), 1);
+    delete images[id];
+    if (S.selected === id) S.selected = ((drafts()[0] || queueItems()[0]) || {}).id || null;
+    save(); render();
+  }
   // drag to reorder
   var dragId = null;
   $('#queue-list').addEventListener('dragstart', function (e) { var li = e.target.closest('.q'); if (!li) return; dragId = li.dataset.id; li.classList.add('is-dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); });
@@ -388,7 +420,11 @@
     $('#empty').hidden = !!item;
     $('#item').hidden = !item;
     if (!item) return;
-    if (document.activeElement !== $('#item-name')) $('#item-name').value = item.name;
+    // settings belong to drafts; a queued picture keeps the ones it was queued with
+    var editable = item.status === 'draft';
+    $('#locked').hidden = editable;
+    $('#locked-text').textContent = lockedText(item);
+    $$('#preset, [data-fit], #sliders input, #save-preset, #reset-adjust, #delete-preset').forEach(function (el) { el.disabled = !editable; });
     var ph = physical();
     $('.previews').style.setProperty('--ar', ph.rw / ph.rh);
     drawPicture(item, ph);
@@ -417,6 +453,12 @@
         (sd === null ? fmtN(p.res.strokes.length) + ' strokes · about ' + fmtT(p.est) : fmtN(sd) + ' of ' + fmtN(p.res.strokes.length) + ' strokes drawn');
       drawPreview(p, item);
     } else $('#plan-meta').textContent = p && p.failed ? '· could not plan this picture' : '';
+  }
+  function lockedText(item) {
+    if (item.status === 'drawing') return 'Drawing with these settings.';
+    if (item.status === 'stopped') return 'Stopped part-way. Press Resume to carry on.';
+    if (item.status === 'done') return 'Drawn with these settings.';
+    return 'In the queue with these settings.';
   }
   // the picture as it will be fitted onto the sticker: cropped to fill it, or inside it on paper
   var pictureKey = '', images = {};
@@ -496,39 +538,44 @@
   function renderBar() {
     var main = $('#status-main'), sub = $('#status-sub'), fill = $('#bar-fill');
     var startB = $('#start-btn'), pauseB = $('#pause-btn'), stopB = $('#stop-btn'), skipB = $('#skip-btn');
-    var left = pending(), item = itemById(run.itemId) || selected();
+    var left = pending(), sel = selected(), isDraft = !!sel && sel.status === 'draft', item = itemById(run.itemId) || sel;
     var total = left.reduce(function (s, i) { var p = planned(i); return s + (p && !p.failed ? p.est : 0); }, 0);
-    startB.hidden = run.active; pauseB.hidden = true; stopB.hidden = !run.active; skipB.hidden = true;
+    var cantPlan = isDraft && !!(sel._plan && sel._plan.failed);
+    pauseB.hidden = true; stopB.hidden = !run.active; skipB.hidden = true;
     fill.style.width = '0%';
+    $('#bar-track').hidden = !run.active;
     if (!run.active) {
-      startB.disabled = !left.length || !device;
       var stopped = left[0] && left[0].status === 'stopped';
-      startB.textContent = stopped ? 'Resume' : 'Start';
-      if (!S.items.length) { main.textContent = 'Add pictures to start'; sub.textContent = ''; }
-      else if (!left.length) { main.textContent = 'Everything is drawn'; sub.textContent = 'Add more pictures to keep going.'; }
-      else {
-        main.textContent = (stopped ? 'Resume ' + left[0].name : 'Ready to draw ' + (left.length === 1 ? left[0].name : left.length + ' pictures'));
-        sub.textContent = device ? (total ? 'about ' + fmtT(total) + ' · ' : '') + 'open the sticker canvas in HeyTea and pick the Brush, then press ' + startB.textContent : 'Connect the phone by USB with USB debugging on.';
-      }
+      startB.hidden = false;
+      if (isDraft) { startB.textContent = device ? 'Start' : 'Add to queue'; startB.disabled = cantPlan; }
+      else { startB.textContent = stopped ? 'Resume' : 'Start'; startB.disabled = !left.length || !device; }
+      main.textContent = left.length ? (left.length === 1 ? '1 picture' : left.length + ' pictures') + ' in the queue' + (stopped ? ', stopped part-way' : '') :
+        queueItems().length ? 'Everything is drawn' : 'Nothing in the queue yet';
+      if (!device) sub.textContent = 'Connect the phone by USB with USB debugging on.';
+      else if (isDraft) sub.textContent = 'Start adds this picture to the queue and draws the queue on your phone.';
+      else if (left.length) sub.textContent = (total ? 'About ' + fmtT(total) + '. ' : '') + 'Open the sticker canvas in HeyTea, pick the Brush, then press ' + startB.textContent + '.';
+      else sub.textContent = 'Add more pictures to keep going.';
       return;
     }
-    var n = S.items.indexOf(item) + 1, of = S.items.length, name = item ? item.name : '';
+    // drawing: Start becomes Add to queue for the picture being set up
+    startB.hidden = !isDraft; startB.textContent = 'Add to queue'; startB.disabled = cantPlan;
+    var qi = queueItems(), n = qi.indexOf(item) + 1, of = qi.length;
     switch (run.state) {
       case 'starting': case 'looking': main.textContent = 'Looking at the phone…'; sub.textContent = ''; break;
       case 'need-canvas': main.textContent = 'Open the sticker canvas in HeyTea and pick the Brush'; sub.textContent = 'Drawing starts as soon as it is on screen.'; break;
-      case 'preparing': main.textContent = 'Getting ' + name + ' ready…'; sub.textContent = item && item._busy ? item._busy : ''; break;
+      case 'preparing': main.textContent = 'Getting the picture ready…'; sub.textContent = item && item._busy ? item._busy : ''; break;
       case 'need-empty': main.textContent = 'Waiting for an empty canvas'; sub.textContent = 'Save the last sticker in HeyTea, then start a new one with the Brush picked. Drawing starts by itself.'; skipB.hidden = false; break;
       case 'stopping': main.textContent = 'Stopping…'; sub.textContent = ''; break;
       default:
         fill.style.width = (run.pm / 10) + '%';
         pauseB.hidden = false;
         pauseB.textContent = run.state === 'paused' || run.state === 'pausing' ? 'Resume' : 'Pause';
-        var head = run.state === 'paused' ? 'Paused' : run.state === 'pausing' ? 'Pausing…' : run.state === 'away' ? 'Waiting for HeyTea to come back' : 'Drawing ' + name;
-        main.textContent = head + (of > 1 ? '  ·  ' + n + ' of ' + of : '');
+        var head = run.state === 'paused' ? 'Paused' : run.state === 'pausing' ? 'Pausing…' : run.state === 'away' ? 'Waiting for HeyTea to come back' : 'Drawing';
+        main.textContent = head + (of > 1 && n ? ' · picture ' + n + ' of ' + of : '');
         sub.textContent = Math.floor(run.pm / 10) + '%  ·  ' + fmtT(run.left) + ' left  ·  ' + (run.tool === 'eraser' ? 'eraser' : 'brush') + (run.strokes ? '  ·  ' + run.strokes + ' strokes' : '');
     }
   }
-  function render() { renderQueue(); renderItem(); renderBar(); }
+  function render() { document.body.classList.toggle('is-empty', !S.items.length); renderQueue(); renderItem(); renderBar(); }
 
   /* ---------- controls ---------- */
 
@@ -539,7 +586,7 @@
   var adjustTimer = 0;
   SLIDERS.forEach(function (s) {
     $('#s-' + s.k).addEventListener('input', function () {
-      var item = selected(); if (!item) return;
+      var item = selected(); if (!item || item.status !== 'draft') return;
       item.adj = item.adj || {}; item.adj[s.k] = +this.value;
       $('#o-' + s.k).textContent = this.value;
       clearTimeout(adjustTimer);
@@ -554,14 +601,6 @@
   });
   $$('[data-fit]').forEach(function (b) {
     b.addEventListener('click', function () { var item = selected(); if (!item) return; item.fit = b.dataset.fit; save(); render(); planLoop(); });
-  });
-  $('#item-name').addEventListener('input', function () { var item = selected(); if (!item) return; item.name = this.value || 'Untitled'; save(); renderQueue(); });
-  $('#remove-item').addEventListener('click', function () {
-    var item = selected(); if (!item) return;
-    if (item.status === 'drawing') { toast('Stop the drawing first.'); return; }
-    var i = S.items.indexOf(item); S.items.splice(i, 1);
-    S.selected = (S.items[i] || S.items[i - 1] || {}).id || null;
-    save(); render();
   });
   $('#save-preset').addEventListener('click', function () {
     var item = selected(); if (!item) return;
@@ -588,7 +627,28 @@
     save(); render(); planLoop(); toast('Deleted "' + pre.name + '"');
   });
 
-  $('#start-btn').addEventListener('click', start);
+  // Start: queue the picture being set up (its settings are kept as they are now), then draw the queue
+  function primary() {
+    var sel = selected();
+    if (sel && sel.status === 'draft') {
+      sel.status = 'queued'; sel.pm = 0; sel.done = 0;
+      S.items.splice(S.items.indexOf(sel), 1); S.items.push(sel);
+      var next = drafts()[0]; if (next) S.selected = next.id;
+      save();
+      if (!device) toast('Queued. Connect the phone to start drawing.');
+      else if (run.active) toast('Added to the queue.');
+    }
+    render(); planLoop();
+    if (!run.active && device && pending().length) start();
+  }
+  $('#start-btn').addEventListener('click', primary);
+  $('#copy-item').addEventListener('click', function () {
+    var src = selected(); if (!src) return;
+    var id = newId(), c = { id: id, name: src.name, img: src.img, presetId: src.presetId, fit: src.fit, adj: Object.assign({}, src.adj || {}), status: 'draft' };
+    // the auto-match carries over, so the copy does not search again
+    if (src.match) c.match = Object.assign({}, src.match, { key: id + src.match.key.slice(src.id.length) });
+    S.items.push(c); select(c.id);
+  });
   $('#pause-btn').addEventListener('click', pauseOrResume);
   $('#stop-btn').addEventListener('click', stop);
   $('#skip-btn').addEventListener('click', function () { run.skip = true; });
@@ -623,14 +683,18 @@
   function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('is-on'); }, 3200); }
 
   // for inspecting the app from the WebView2 devtools (WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=...)
-  window.__sd = { S: S, run: run, planLoop: planLoop, planned: planned, planKey: planKey, effective: effective, get planning() { return planning; }, get device() { return device; } };
+  window.__sd = { S: S, run: run, render: render, planLoop: planLoop, planned: planned, planKey: planKey, effective: effective, get planning() { return planning; }, get device() { return device; } };
 
   /* ---------- start up ---------- */
 
   invoke('load_state').then(function (txt) {
     try {
       var o = JSON.parse(txt || '{}');
-      if (o.items) S.items = o.items.map(function (i) { if (i.status === 'drawing') i.status = 'stopped'; return i; });
+      if (o.items) S.items = o.items.map(function (i) {
+        if (i.status === 'drawing') i.status = 'stopped';
+        if (!i.status || i.status === 'ready') i.status = 'draft';   // from before the queue waited for Start
+        return i;
+      });
       S.presets = o.presets || []; S.selected = o.selected || (S.items[0] || {}).id || null;
       S.lastPreset = o.lastPreset || 'best'; S.lineup = o.lineup || null; S.settings = o.settings || { adb: '' };
     } catch (e) { /* first run */ }

@@ -26,71 +26,78 @@
         <span class="queue__count" id="queue-count"></span>
       </div>
       <ol class="queue__list" id="queue-list"></ol>
-      <label class="add">
-        <input type="file" id="file-input" accept="image/*" multiple hidden>
-        <span>+ Add pictures</span>
-      </label>
-      <p class="queue__hint">or drop them anywhere</p>
+      <p class="queue__empty" id="queue-empty">Nothing queued yet. Pictures join the queue when you press Start.</p>
     </aside>
 
     <section class="work">
       <div class="empty" id="empty">
         <div class="empty__art" aria-hidden="true"></div>
         <h1>Draw a picture on your HeyTea sticker</h1>
-        <p>Add pictures to the queue, pick a preset, and press Start. The phone draws them one after another.</p>
+        <p>Add pictures and press Start. Your phone draws them one after another.</p>
         <label class="btn btn--primary">
           <input type="file" id="file-input-2" accept="image/*" multiple hidden>Add pictures
         </label>
+        <p class="empty__hint">or drop them anywhere in this window</p>
       </div>
 
       <div class="item" id="item" hidden>
-        <div class="item__head">
-          <input class="item__name" id="item-name" spellcheck="false" aria-label="Name">
-          <button class="text-btn" id="remove-item" type="button">Remove</button>
+        <div class="tabs">
+          <div class="tabs__list" id="tab-list"></div>
+          <label class="tab tab--add" title="Add pictures">
+            <input type="file" id="file-input" accept="image/*" multiple hidden>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg><span class="sr-only">Add pictures</span>
+          </label>
         </div>
-        <div class="previews">
-          <figure class="pane">
-            <div class="pane__box"><canvas id="pic" width="10" height="10"></canvas></div>
-            <figcaption>Picture</figcaption>
-          </figure>
-          <figure class="pane">
-            <div class="pane__box">
-              <canvas id="draw-preview" width="10" height="10"></canvas>
-              <div class="pane__busy" id="plan-busy" hidden><span class="spinner"></span><span id="plan-busy-text">Finding the best settings…</span></div>
-            </div>
-            <figcaption>Drawing <span class="muted" id="plan-meta"></span></figcaption>
-          </figure>
-        </div>
+        <div class="item__body">
+          <div class="previews">
+            <figure class="pane">
+              <div class="pane__box"><canvas id="pic" width="10" height="10"></canvas></div>
+              <figcaption>Picture</figcaption>
+            </figure>
+            <figure class="pane">
+              <div class="pane__box">
+                <canvas id="draw-preview" width="10" height="10"></canvas>
+                <div class="pane__busy" id="plan-busy" hidden><span class="spinner"></span><span id="plan-busy-text">Finding the best settings…</span></div>
+              </div>
+              <figcaption>Drawing <span class="muted" id="plan-meta"></span></figcaption>
+            </figure>
+          </div>
 
-        <div class="settings-grid">
-          <div class="field">
-            <span class="field__label">Preset</span>
-            <div class="preset">
+          <div class="inspector">
+            <div class="locked" id="locked" hidden>
+              <p id="locked-text"></p>
+              <button class="btn" id="copy-item" type="button">Edit a copy</button>
+            </div>
+            <div class="field">
+              <div class="field__row">
+                <label class="field__label" for="preset">Preset</label>
+                <button class="text-btn text-btn--quiet text-btn--small" id="delete-preset" type="button" hidden>Delete preset</button>
+              </div>
               <select id="preset"></select>
-              <button class="text-btn" id="save-preset" type="button">Save as preset</button>
-              <button class="text-btn text-btn--danger" id="delete-preset" type="button" hidden>Delete</button>
             </div>
-          </div>
-          <div class="field">
-            <span class="field__label">Picture</span>
-            <div class="seg" role="group" aria-label="Picture fit">
-              <button type="button" data-fit="cover">Fill the sticker</button>
-              <button type="button" data-fit="contain">Fit inside</button>
+            <div class="field">
+              <span class="field__label" id="fit-label">Fit</span>
+              <div class="seg" role="group" aria-labelledby="fit-label">
+                <button type="button" data-fit="cover">Fill the sticker</button>
+                <button type="button" data-fit="contain">Fit inside</button>
+              </div>
             </div>
+            <details class="adjust" id="adjust">
+              <summary>Adjust <span class="muted" id="adjust-note"></span></summary>
+              <div class="sliders" id="sliders"></div>
+              <div class="adjust__actions">
+                <button class="text-btn" id="save-preset" type="button">Save as preset</button>
+                <button class="text-btn text-btn--quiet" id="reset-adjust" type="button">Reset</button>
+              </div>
+            </details>
           </div>
         </div>
-
-        <details class="adjust" id="adjust">
-          <summary>Adjust <span class="muted" id="adjust-note"></span></summary>
-          <div class="sliders" id="sliders"></div>
-          <button class="text-btn" id="reset-adjust" type="button">Reset to the preset</button>
-        </details>
       </div>
     </section>
   </main>
 
   <footer class="bar" id="bar">
-    <div class="bar__track"><i id="bar-fill"></i></div>
+    <div class="bar__track" id="bar-track" hidden><i id="bar-fill"></i></div>
     <div class="bar__row">
       <div class="bar__status">
         <strong id="status-main">Add pictures to start</strong>
@@ -107,7 +114,7 @@
 
   <dialog class="sheet" id="settings">
     <form method="dialog">
-      <h3>Settings</h3>
+      <h2>Settings</h2>
       <label class="field">
         <span class="field__label">adb</span>
         <input id="adb-path" placeholder="Found automatically" spellcheck="false">
@@ -124,7 +131,7 @@
 
   <dialog class="sheet" id="preset-dialog">
     <form method="dialog">
-      <h3>Save as preset</h3>
+      <h2>Save as preset</h2>
       <label class="field">
         <span class="field__label">Name</span>
         <input id="preset-name" required maxlength="40" spellcheck="false">
